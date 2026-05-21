@@ -100,25 +100,41 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    # Cambiamos a 'b' (best) para que busque cualquier formato pre-combinado disponible
+    # Quitamos filtros de formato para que yt-dlp no rebote nunca al extraer la info
     opciones = {
-        'format': 'b',
         'quiet': True,
         'no_warnings': True,
     }
 
-    # Si subiste el archivo cookies.txt, el programa lo usará automáticamente para autenticarse
     if os.path.exists('cookies.txt'):
         opciones['cookiefile'] = 'cookies.txt'
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
+            # Extraemos todos los metadatos disponibles del video de forma segura
             info = ydl.extract_info(video_url, download=False)
-            url_descarga = info.get('url')
+            
+            # Obtenemos la lista completa de formatos crudos que ofrece YouTube
+            formatos = info.get('formats', [])
+            formatos_combinados = []
+            
+            for f in formatos:
+                # Buscamos formatos que tengan URL directa y que incluyan tanto video como audio juntos
+                if f.get('url') and f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                    formatos_combinados.append(f)
+            
+            if formatos_combinados:
+                # yt-dlp ordena la lista de peor a mejor calidad por defecto.
+                # Por lo tanto, el último elemento de la lista siempre será el mejor formato combinado disponible.
+                url_descarga = formatos_combinados[-1].get('url')
+            else:
+                # Si YouTube no ofrece ninguno combinado, usamos el enlace por defecto del sistema
+                url_descarga = info.get('url')
 
         if not url_descarga:
-            return "No se pudo obtener el enlace directo del video.", 500
+            return "No se pudo encontrar un formato de video directo y compatible para este enlace.", 500
 
+        # Te redirige al archivo final para iniciar la descarga inmediata
         respuesta = Response(status=302)
         respuesta.headers['Location'] = url_descarga
         return respuesta
