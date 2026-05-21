@@ -6,20 +6,33 @@ from flask import Flask, render_template_string, request, Response
 app = Flask(__name__)
 COOKIES_PATH = 'cookies.txt'
 
-# ... (Mantén el resto de PAGINA_HTML igual) ...
+PAGINA_HTML = """
+<!DOCTYPE html>
+<html lang="es">
+<body>
+    <h1>Descargador</h1>
+    <form action="/descargar" method="GET">
+        <input type="text" name="url" placeholder="Pega el link aquí" required>
+        <button type="submit">Descargar</button>
+    </form>
+</body>
+</html>
+"""
 
-@app.route('/descargar')
+@app.route('/')
+def inicio():
+    return render_template_string(PAGINA_HTML)
+
+@app.route('/descargar', methods=['GET'])
 def descargar():
     video_url = request.args.get('url')
     if not video_url:
-        return "URL no válida", 400
+        return "No se recibió ninguna URL.", 400
 
-    # CAMBIO CRÍTICO: 'best' obliga a bajar el formato que ya tiene audio y video unidos.
-    # Esto elimina la dependencia de ffmpeg y el error de "Requested format is not available"
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best', 
+        'format': 'best',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
     }
 
@@ -34,7 +47,7 @@ def descargar():
 
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
-            return "No se pudo obtener el archivo.", 500
+            return "El video se descargó pero no se encontró en el sistema.", 500
 
         archivo = archivos[0]
         ext = archivo.split('.')[-1]
@@ -48,11 +61,13 @@ def descargar():
 
         return Response(
             generar(),
-            content_type=f'video/{ext}',
+            mimetype=f'video/{ext}',
             headers={'Content-Disposition': f'attachment; filename="{titulo}.{ext}"'}
         )
 
     except Exception as e:
         return f"Error técnico: {str(e)}", 500
 
-# ... (El resto del código igual) ...
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
