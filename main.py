@@ -1,4 +1,3 @@
-
 import os
 import yt_dlp
 import requests as req_lib
@@ -55,7 +54,7 @@ def descargar():
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best[ext=mp4]/best',
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
     }
 
     if os.path.exists('cookies.txt'):
@@ -65,7 +64,7 @@ def descargar():
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(video_url, download=False)
 
-        url_directa = info.get('url')
+        url_directa = info.get('url') or info.get('requested_downloads', [{}])[0].get('url')
         titulo = info.get('title', 'video').replace('/', '-')
         ext = info.get('ext', 'mp4')
 
