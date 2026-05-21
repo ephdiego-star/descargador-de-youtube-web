@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
 
-COOKIES_PATH = '/tmp/cookies.txt'
+COOKIES_PATH = 'cookies.txt'
 
 PAGINA_HTML = """
 <!DOCTYPE html>
@@ -42,35 +42,26 @@ PAGINA_HTML = """
 def inicio():
     return render_template_string(PAGINA_HTML)
 
-@app.route('/debug')
-def debug():
-    cookies_content = os.environ.get('YOUTUBE_COOKIES')
-    if not cookies_content:
-        return "YOUTUBE_COOKIES no existe", 200
-    with open(COOKIES_PATH, 'w') as f:
-        f.write(cookies_content)
-    return f"Cookies escritas. Longitud: {len(cookies_content)} chars. Primeras 100: {cookies_content[:100]}", 200
-
 @app.route('/descargar')
 def descargar():
     video_url = request.args.get('url')
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    cookies_content = os.environ.get('YOUTUBE_COOKIES')
-    if cookies_content:
-        with open(COOKIES_PATH, 'w') as f:
-            f.write(cookies_content)
-
+    # Configuración base para forzar la descarga de corrientes de audio y video
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best',
+        'format': 'bestvideo+bestaudio/best',
+        'merge_output_format': 'mp4',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
     }
 
+    # Verificamos si existe el archivo cookies.txt en la raíz del proyecto
     if os.path.exists(COOKIES_PATH):
         opciones['cookiefile'] = COOKIES_PATH
+    elif os.path.exists('/app/cookies.txt'): # Ruta alternativa que genera Nixpacks a veces
+        opciones['cookiefile'] = '/app/cookies.txt'
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
@@ -79,11 +70,10 @@ def descargar():
         video_id = info.get('id')
         titulo = info.get('title', 'video').replace('/', '-')
 
-        # Buscar cualquier archivo descargado con ese id
-        import glob
+        # Buscamos el archivo final creado en /tmp
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
-            return "No se encontró el archivo descargado.", 500
+            return "No se encontró el archivo en el servidor temporal.", 500
 
         archivo = archivos[0]
         ext = archivo.split('.')[-1]
@@ -92,7 +82,10 @@ def descargar():
             with open(archivo, 'rb') as f:
                 while chunk := f.read(1024 * 256):
                     yield chunk
-            os.remove(archivo)
+            try:
+                os.remove(archivo)
+            except:
+                pass
 
         return Response(
             generar(),
