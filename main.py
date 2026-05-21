@@ -4,14 +4,11 @@ import yt_dlp
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
-
-# Usamos la ruta local donde Railway clona el repo
 COOKIES_PATH = 'cookies.txt'
 
 PAGINA_HTML = """
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>Descargador</title></head>
 <body>
     <h1>Descargador Web</h1>
     <form action="/descargar" method="GET">
@@ -31,14 +28,15 @@ def descargar():
     video_url = request.args.get('url')
     if not video_url: return "No URL", 400
 
-    # CAMBIO RADICAL: 'format': 'best[ext=mp4]' 
-    # Esto fuerza a bajar solo archivos que ya son MP4 y tienen audio+video juntos.
-    # No necesita ffmpeg y nunca dará el error de formato no disponible.
+    # Configuración Anti-Bot: User-Agent + Cookies
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best[ext=mp4]/best', 
+        'format': 'best',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
     }
 
     if os.path.exists(COOKIES_PATH):
@@ -51,7 +49,7 @@ def descargar():
             titulo = info.get('title', 'video').replace('/', '-')
 
         archivos = glob.glob(f'/tmp/{video_id}.*')
-        if not archivos: return "Error: No se descargó nada.", 500
+        if not archivos: return "Error: No se encontró el archivo.", 500
 
         archivo = archivos[0]
         def generar():
@@ -62,7 +60,7 @@ def descargar():
         return Response(generar(), mimetype='video/mp4', 
                         headers={'Content-Disposition': f'attachment; filename="{titulo}.mp4"'})
     except Exception as e:
-        return f"Error: {str(e)}", 500
+        return f"Error técnico: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
