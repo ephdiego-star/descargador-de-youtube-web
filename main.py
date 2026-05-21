@@ -55,7 +55,8 @@ def descargar():
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': '18/worst[ext=mp4]/worst',
+    'format': 'worstvideo[ext=mp4]+worstaudio[ext=m4a]/worst[ext=mp4]/worst',
+
     }
 
     if os.path.exists(COOKIES_PATH):
