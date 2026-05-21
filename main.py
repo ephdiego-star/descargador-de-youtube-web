@@ -12,7 +12,7 @@ PAGINA_HTML = """
 <body>
     <h1>Descargador</h1>
     <form action="/descargar" method="GET">
-        <input type="text" name="url" placeholder="Pega el link aquí" required>
+        <input type="text" name="url" placeholder="Pega el link aquí" required style="width: 300px;">
         <button type="submit">Descargar</button>
     </form>
 </body>
@@ -29,10 +29,11 @@ def descargar():
     if not video_url:
         return "No se recibió ninguna URL.", 400
 
+    # CAMBIO RADICAL: Eliminamos la restricción de 'best'. 
+    # Dejamos que yt-dlp elija automáticamente basándose en lo que YouTube entregue.
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
     }
 
@@ -41,13 +42,15 @@ def descargar():
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
+            # Extraemos info primero para ver qué hay disponible
             info = ydl.extract_info(video_url, download=True)
             video_id = info.get('id')
             titulo = info.get('title', 'video').replace('/', '-')
 
+        # Buscamos lo que sea que haya bajado (mp4, mkv, webm, etc)
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
-            return "El video se descargó pero no se encontró en el sistema.", 500
+            return "No se encontró el archivo descargado.", 500
 
         archivo = archivos[0]
         ext = archivo.split('.')[-1]
