@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
 
-# Diseño visual de la página web (HTML + CSS moderno con modo oscuro automático)
+# Diseño visual de la página web
 PAGINA_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -92,7 +92,6 @@ PAGINA_HTML = """
 
 @app.route('/')
 def inicio():
-    # Muestra la página web visual al entrar a la dirección
     return render_template_string(PAGINA_HTML)
 
 @app.route('/descargar')
@@ -101,18 +100,16 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    # Configuración avanzada con cabeceras simuladas para evitar bloqueos por bot en la nube
+    # Configuración con cookies añadidas para saltar el bloqueo estricto de IP en Render
     opciones = {
         'format': 'best',
         'quiet': True,
         'no_warnings': True,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Sec-Fetch-Mode': 'navigate',
-        }
     }
+
+    # Si subiste el archivo cookies.txt, el programa lo usará automáticamente para autenticarse
+    if os.path.exists('cookies.txt'):
+        opciones['cookiefile'] = 'cookies.txt'
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
@@ -122,7 +119,6 @@ def descargar():
         if not url_descarga:
             return "No se pudo obtener el enlace directo del video.", 500
 
-        # Redirigimos al usuario directamente al flujo del video de YouTube para que se descargue en su navegador
         respuesta = Response(status=302)
         respuesta.headers['Location'] = url_descarga
         return respuesta
@@ -131,5 +127,4 @@ def descargar():
         return f"Ocurrió un error al procesar el video: {str(e)}", 500
 
 if __name__ == '__main__':
-    # Esto corre el servidor localmente en tu PC para pruebas
     app.run(debug=True, port=5000)
