@@ -52,11 +52,10 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    opciones = {
-        'quiet': True,
-        'no_warnings': True,
-    'format': 'worstvideo[ext=mp4]+worstaudio[ext=m4a]/worst[ext=mp4]/worst',
-
+opciones = {
+    'quiet': False,
+    'no_warnings': False,
+    'listformats': True,
     }
 
     if os.path.exists(COOKIES_PATH):
