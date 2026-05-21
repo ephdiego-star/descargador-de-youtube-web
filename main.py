@@ -65,8 +65,7 @@ def descargar():
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'merge_output_format': 'mp4',
+        'format': 'best',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
     }
 
@@ -82,7 +81,13 @@ def descargar():
         archivo = f'/tmp/{video_id}.mp4'
 
         if not os.path.exists(archivo):
-            return "No se pudo generar el archivo.", 500
+            # Si no existe como .mp4, buscar cualquier archivo con ese ID
+            import glob
+            archivos = glob.glob(f'/tmp/{video_id}.*')
+            if archivos:
+                archivo = archivos[0]
+            else:
+                return "No se pudo generar el archivo.", 500
 
         def generar():
             with open(archivo, 'rb') as f:
@@ -90,11 +95,14 @@ def descargar():
                     yield chunk
             os.remove(archivo)
 
+        # Obtener la extensión real del archivo
+        ext = archivo.split('.')[-1]
+        
         return Response(
             generar(),
-            content_type='video/mp4',
+            content_type=f'video/{ext}',
             headers={
-                'Content-Disposition': f'attachment; filename="{titulo}.mp4"',
+                'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
             }
         )
 
