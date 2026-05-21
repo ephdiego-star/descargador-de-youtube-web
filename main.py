@@ -51,11 +51,11 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    opciones = {
-        'quiet': True,
-        'no_warnings': True,
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-    }
+opciones = {
+    'quiet': True,
+    'no_warnings': True,
+    'format': '18/worst[ext=mp4]/worst',
+}
 
     if os.path.exists('cookies.txt'):
         opciones['cookiefile'] = 'cookies.txt'
