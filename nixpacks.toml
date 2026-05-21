@@ -1,6 +1,2 @@
-# nixpacks.toml
 [phases.setup]
 nixPackages = ["python3", "ffmpeg"]
-
-[start]
-cmd = "python3 main.py"
