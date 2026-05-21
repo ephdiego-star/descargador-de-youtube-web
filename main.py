@@ -4,43 +4,9 @@ import yt_dlp
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
-
 COOKIES_PATH = 'cookies.txt'
 
-PAGINA_HTML = """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Descargador de YouTube Web</title>
-    <style>
-        :root { --bg: #121212; --text: #ffffff; --card: #1e1e1e; --primary: #3b82f6; }
-        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: var(--card); padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 500px; }
-        h1 { font-size: 24px; margin-bottom: 20px; color: var(--primary); }
-        input[type="text"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; margin-bottom: 15px; font-size: 14px; }
-        button { background: var(--primary); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; transition: background 0.2s; }
-        button:hover { background: #2563eb; }
-        .footer { margin-top: 20px; font-size: 12px; color: #888; font-style: italic; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📥 Descargador Web Inteligente</h1>
-        <form action="/descargar" method="GET">
-            <input type="text" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
-            <button type="submit">Descargar Video</button>
-        </form>
-        <div class="footer">Calidad Automática Inteligente</div>
-    </div>
-</body>
-</html>
-"""
-
-@app.route('/')
-def inicio():
-    return render_template_string(PAGINA_HTML)
+# ... (Mantén el resto de PAGINA_HTML igual) ...
 
 @app.route('/descargar')
 def descargar():
@@ -48,13 +14,12 @@ def descargar():
     if not video_url:
         return "URL no válida", 400
 
-    # Configuración de máxima compatibilidad
+    # CAMBIO CRÍTICO: 'best' obliga a bajar el formato que ya tiene audio y video unidos.
+    # Esto elimina la dependencia de ffmpeg y el error de "Requested format is not available"
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        # Intenta combinar, si no, baja el mejor disponible automáticamente
-        'format': 'bestvideo+bestaudio/best',
-        'merge_output_format': 'mp4',
+        'format': 'best', 
         'outtmpl': '/tmp/%(id)s.%(ext)s',
     }
 
@@ -69,7 +34,7 @@ def descargar():
 
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
-            return "Error al procesar el archivo.", 500
+            return "No se pudo obtener el archivo.", 500
 
         archivo = archivos[0]
         ext = archivo.split('.')[-1]
@@ -88,8 +53,6 @@ def descargar():
         )
 
     except Exception as e:
-        return f"Error: {str(e)}", 500
+        return f"Error técnico: {str(e)}", 500
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+# ... (El resto del código igual) ...
