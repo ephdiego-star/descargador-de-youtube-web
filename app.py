@@ -100,9 +100,9 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    # Configuración optimizada para formatos MP4 estándar con audio integrado
+    # Cambiamos a 'b' (best) para que busque cualquier formato pre-combinado disponible
     opciones = {
-        'format': 'best[ext=mp4]/best',
+        'format': 'b',
         'quiet': True,
         'no_warnings': True,
     }
