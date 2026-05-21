@@ -6,10 +6,11 @@ from flask import Flask, render_template_string, request, Response
 app = Flask(__name__)
 
 cookies_content = os.environ.get('YOUTUBE_COOKIES')
+COOKIES_PATH = '/tmp/cookies.txt'
 if cookies_content:
-    with open('cookies.txt', 'w') as f:
+    with open(COOKIES_PATH, 'w') as f:
         f.write(cookies_content)
-
+        
 PAGINA_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -57,9 +58,9 @@ def descargar():
         'format': '18/worst[ext=mp4]/worst',
     }
 
-    if os.path.exists('cookies.txt'):
-        opciones['cookiefile'] = 'cookies.txt'
-
+    if os.path.exists(COOKIES_PATH):
+        opciones['cookiefile'] = COOKIES_PATH
+        
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(video_url, download=False)
