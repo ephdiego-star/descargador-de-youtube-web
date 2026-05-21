@@ -42,6 +42,15 @@ PAGINA_HTML = """
 def inicio():
     return render_template_string(PAGINA_HTML)
 
+@app.route('/debug')
+def debug():
+    cookies_content = os.environ.get('YOUTUBE_COOKIES')
+    if not cookies_content:
+        return "YOUTUBE_COOKIES no existe", 200
+    with open(COOKIES_PATH, 'w') as f:
+        f.write(cookies_content)
+    return f"Cookies escritas. Longitud: {len(cookies_content)} chars. Primeras 100: {cookies_content[:100]}", 200
+
 @app.route('/descargar')
 def descargar():
     video_url = request.args.get('url')
