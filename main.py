@@ -6,10 +6,6 @@ from flask import Flask, render_template_string, request, Response
 app = Flask(__name__)
 
 COOKIES_PATH = '/tmp/cookies.txt'
-cookies_content = os.environ.get('YOUTUBE_COOKIES')
-if cookies_content:
-    with open(COOKIES_PATH, 'w') as f:
-        f.write(cookies_content)
 
 PAGINA_HTML = """
 <!DOCTYPE html>
@@ -51,6 +47,11 @@ def descargar():
     video_url = request.args.get('url')
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
+
+    cookies_content = os.environ.get('YOUTUBE_COOKIES')
+    if cookies_content:
+        with open(COOKIES_PATH, 'w') as f:
+            f.write(cookies_content)
 
     opciones = {
         'quiet': True,
