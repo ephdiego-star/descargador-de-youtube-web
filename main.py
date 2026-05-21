@@ -51,11 +51,11 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-opciones = {
-    'quiet': True,
-    'no_warnings': True,
-    'format': '18/worst[ext=mp4]/worst',
-}
+    opciones = {
+        'quiet': True,
+        'no_warnings': True,
+        'format': '18/worst[ext=mp4]/worst',
+    }
 
     if os.path.exists('cookies.txt'):
         opciones['cookiefile'] = 'cookies.txt'
@@ -64,7 +64,7 @@ opciones = {
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(video_url, download=False)
 
-        url_directa = info.get('url') or info.get('requested_downloads', [{}])[0].get('url')
+        url_directa = info.get('url')
         titulo = info.get('title', 'video').replace('/', '-')
         ext = info.get('ext', 'mp4')
 
