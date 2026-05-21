@@ -32,7 +32,7 @@ PAGINA_HTML = """
             <input type="text" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
             <button type="submit">Descargar Video</button>
         </form>
-        <div class="footer">Funciona en Celulares, Tablets y PCs - Calidad Estándar</div>
+        <div class="footer">Calidad Automática Inteligente</div>
     </div>
 </body>
 </html>
@@ -46,34 +46,30 @@ def inicio():
 def descargar():
     video_url = request.args.get('url')
     if not video_url:
-        return "Por favor, introduce una URL válida.", 400
+        return "URL no válida", 400
 
-    # Configuración base para forzar la descarga de corrientes de audio y video
+    # Configuración de máxima compatibilidad
     opciones = {
         'quiet': True,
         'no_warnings': True,
+        # Intenta combinar, si no, baja el mejor disponible automáticamente
         'format': 'bestvideo+bestaudio/best',
         'merge_output_format': 'mp4',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
     }
 
-    # Verificamos si existe el archivo cookies.txt en la raíz del proyecto
     if os.path.exists(COOKIES_PATH):
         opciones['cookiefile'] = COOKIES_PATH
-    elif os.path.exists('/app/cookies.txt'): # Ruta alternativa que genera Nixpacks a veces
-        opciones['cookiefile'] = '/app/cookies.txt'
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(video_url, download=True)
+            video_id = info.get('id')
+            titulo = info.get('title', 'video').replace('/', '-')
 
-        video_id = info.get('id')
-        titulo = info.get('title', 'video').replace('/', '-')
-
-        # Buscamos el archivo final creado en /tmp
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
-            return "No se encontró el archivo en el servidor temporal.", 500
+            return "Error al procesar el archivo.", 500
 
         archivo = archivos[0]
         ext = archivo.split('.')[-1]
@@ -82,21 +78,17 @@ def descargar():
             with open(archivo, 'rb') as f:
                 while chunk := f.read(1024 * 256):
                     yield chunk
-            try:
+            if os.path.exists(archivo):
                 os.remove(archivo)
-            except:
-                pass
 
         return Response(
             generar(),
             content_type=f'video/{ext}',
-            headers={
-                'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
-            }
+            headers={'Content-Disposition': f'attachment; filename="{titulo}.{ext}"'}
         )
 
     except Exception as e:
-        return f"Error al procesar el video: {str(e)}", 500
+        return f"Error: {str(e)}", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
