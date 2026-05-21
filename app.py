@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
 
-# Diseño visual de la página web
+# Diseño visual de la página web (HTML + CSS moderno en modo oscuro)
 PAGINA_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -100,9 +100,9 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    # Configuración con cookies añadidas para saltar el bloqueo estricto de IP en Render
+    # Configuración optimizada para formatos MP4 estándar con audio integrado
     opciones = {
-        'format': 'best',
+        'format': 'best[ext=mp4]/best',
         'quiet': True,
         'no_warnings': True,
     }
