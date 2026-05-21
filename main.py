@@ -4,7 +4,7 @@ import yt_dlp
 from flask import Flask, render_template_string, request, Response, stream_with_context
 
 app = Flask(__name__)
-COOKIES_PATH = 'cookies.txt'
+COOKIES_PATH = os.environ.get('COOKIES_PATH', 'cookies.txt')
 
 PAGINA_HTML = """
 <!DOCTYPE html>
@@ -32,16 +32,15 @@ PAGINA_HTML = """
             max-width: 500px;
             width: 100%;
         }
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
-            text-align: center;
-        }
-        .subtitle {
-            color: #666;
-            text-align: center;
-            margin-bottom: 30px;
+        h1 { color: #333; margin-bottom: 10px; font-size: 28px; text-align: center; }
+        .subtitle { color: #666; text-align: center; margin-bottom: 30px; font-size: 14px; }
+        .alert {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
             font-size: 14px;
         }
         input[type="text"] {
@@ -50,12 +49,7 @@ PAGINA_HTML = """
             border: 2px solid #e0e0e0;
             border-radius: 10px;
             font-size: 16px;
-            transition: border-color 0.3s;
             margin-bottom: 20px;
-        }
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #667eea;
         }
         button {
             width: 100%;
@@ -67,40 +61,25 @@ PAGINA_HTML = """
             font-size: 18px;
             font-weight: bold;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
         }
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-        }
-        button:active {
-            transform: translateY(0);
-        }
-        .info {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f5f5f5;
-            border-radius: 10px;
-            font-size: 12px;
-            color: #666;
-            text-align: center;
-        }
-        .error {
-            color: #d32f2f;
-            background: #ffebee;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 20px;
-            text-align: center;
-        }
+        button:hover { transform: translateY(-2px); }
+        .info { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 10px; font-size: 12px; color: #666; text-align: center; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎥 Descargador YouTube</h1>
         <p class="subtitle">Descarga videos fácilmente</p>
-        <form action="/descargar" method="GET" onsubmit="return validarURL()">
-            <input type="text" name="url" id="url" placeholder="Pega el enlace de YouTube aquí..." required>
+        
+        {% if not cookies_exist %}
+        <div class="alert">
+            ⚠️ <strong>Configuración necesaria:</strong> Las cookies de YouTube no están configuradas. 
+            <a href="/configurar" style="color: #856404; font-weight: bold;">Configurar ahora</a>
+        </div>
+        {% endif %}
+        
+        <form action="/descargar" method="GET">
+            <input type="text" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
             <button type="submit">⬇️ Descargar Video</button>
         </form>
         <div class="info">
@@ -108,49 +87,158 @@ PAGINA_HTML = """
             📱 Móvil | 💻 PC | 📟 Tablet
         </div>
     </div>
-    
-    <script>
-        function validarURL() {
-            const url = document.getElementById('url').value;
-            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
-                alert('Por favor, introduce una URL válida de YouTube');
-                return false;
-            }
-            document.querySelector('button').textContent = '⏳ Procesando...';
-            document.querySelector('button').disabled = true;
-            return true;
-        }
-    </script>
 </body>
 </html>
 """
 
 @app.route('/')
 def inicio():
-    return render_template_string(PAGINA_HTML)
+    cookies_exist = os.path.exists(COOKIES_PATH)
+    return render_template_string(PAGINA_HTML, cookies_exist=cookies_exist)
+
+@app.route('/configurar')
+def configurar():
+    return """
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Configurar Cookies</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 20px;
+            }
+            .container {
+                background: white;
+                border-radius: 20px;
+                padding: 40px;
+                max-width: 600px;
+                width: 100%;
+            }
+            h2 { color: #333; margin-bottom: 20px; }
+            .step {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 10px;
+                margin-bottom: 15px;
+                border-left: 4px solid #667eea;
+            }
+            .step h3 { color: #667eea; margin-bottom: 10px; }
+            code {
+                background: #e9ecef;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 14px;
+            }
+            .important {
+                background: #fff3cd;
+                border: 1px solid #ffc107;
+                color: #856404;
+                padding: 15px;
+                border-radius: 10px;
+                margin: 20px 0;
+            }
+            a { color: #667eea; text-decoration: none; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>🔧 Cómo configurar las cookies de YouTube</h2>
+            
+            <div class="important">
+                <strong>⚠️ ¿Por qué es necesario?</strong><br>
+                YouTube bloquea las descargas automáticas para prevenir bots. 
+                Las cookies demuestran que eres un usuario real.
+            </div>
+            
+            <div class="step">
+                <h3>Paso 1: Instalar extensión</h3>
+                <p>Instala <strong>Get cookies.txt LOCALLY</strong> en Chrome/Edge:</p>
+                <a href="https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">
+                    🔗 Instalar extensión (Chrome Web Store)
+                </a>
+            </div>
+            
+            <div class="step">
+                <h3>Paso 2: Abrir YouTube en modo incógnito</h3>
+                <p>Abre una <strong>ventana de incógnito</strong> (Ctrl+Shift+N)</p>
+                <p>Ve a <a href="https://www.youtube.com" target="_blank">YouTube</a> e inicia sesión</p>
+            </div>
+            
+            <div class="step">
+                <h3>Paso 3: Exportar cookies</h3>
+                <p>Haz clic en el icono de la extensión y selecciona <strong>"Export"</strong></p>
+                <p>Guarda el archivo como <code>cookies.txt</code></p>
+            </div>
+            
+            <div class="step">
+                <h3>Paso 4: Configurar variable de entorno</h3>
+                <p>Agrega esta variable en tu plataforma (Render, Railway, etc.):</p>
+                <p><code>YOUTUBE_COOKIES</code> con el contenido del archivo cookies.txt</p>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="/" style="background: #667eea; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none;">
+                    ⬅️ Volver al descargador
+                </a>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.route('/debug')
+def debug():
+    cookies_content = os.environ.get('YOUTUBE_COOKIES')
+    if not cookies_content:
+        return "❌ YOUTUBE_COOKIES no está configurada como variable de entorno", 200
+    
+    # Verificar formato de cookies
+    if not cookies_content.startswith('# Netscape HTTP Cookie File') and \
+       not cookies_content.startswith('# HTTP Cookie File'):
+        return "⚠️ Las cookies no tienen el formato correcto. Debe comenzar con '# Netscape HTTP Cookie File'", 200
+    
+    try:
+        with open(COOKIES_PATH, 'w') as f:
+            f.write(cookies_content)
+        return f"✅ Cookies configuradas correctamente. Longitud: {len(cookies_content)} caracteres", 200
+    except Exception as e:
+        return f"❌ Error al escribir cookies: {str(e)}", 500
 
 @app.route('/descargar', methods=['GET'])
 def descargar():
     video_url = request.args.get('url')
     if not video_url:
-        return "❌ Error: No se proporcionó una URL", 400
-    
-    # Validar que sea una URL de YouTube
-    if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
-        return """
-        <html><body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h2>❌ URL no válida</h2>
-            <p>Por favor, introduce una URL de YouTube válida</p>
-            <a href="/" style="color: #667eea;">⬅️ Volver</a>
-        </body></html>
-        """, 400
+        return "❌ No se proporcionó URL", 400
 
-    # Configuración mejorada
+    # Verificar si las cookies existen
+    if not os.path.exists(COOKIES_PATH):
+        cookies_content = os.environ.get('YOUTUBE_COOKIES')
+        if cookies_content:
+            with open(COOKIES_PATH, 'w') as f:
+                f.write(cookies_content)
+        else:
+            return """
+            <html><body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                <h2>❌ Cookies no configuradas</h2>
+                <p>Es necesario configurar las cookies de YouTube para descargar videos.</p>
+                <a href="/configurar" style="color: #667eea; font-weight: bold;">🔧 Ir a configuración</a>
+            </body></html>
+            """, 400
+
+    # Configuración con cookies y User-Agent
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best[height<=720]/best',  # Limitar a 720p para mejor compatibilidad
+        'format': 'best[height<=720]/best',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
+        'cookiefile': COOKIES_PATH,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -158,94 +246,63 @@ def descargar():
         },
         'socket_timeout': 30,
         'retries': 3,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+            }
+        }
     }
 
-    if os.path.exists(COOKIES_PATH):
-        opciones['cookiefile'] = COOKIES_PATH
-        print("✅ Cookies cargadas correctamente")
-
     try:
-        # Informar al usuario que estamos procesando
-        print(f"📥 Procesando: {video_url}")
-        
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(video_url, download=True)
             video_id = info.get('id')
             titulo = info.get('title', 'video')
-            # Limpiar el título para el nombre del archivo
             titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            if not titulo:
-                titulo = 'video'
 
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
-            return """
-            <html><body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                <h2>❌ Error de descarga</h2>
-                <p>No se pudo encontrar el archivo descargado. Intenta con otro video.</p>
-                <a href="/" style="color: #667eea;">⬅️ Intentar de nuevo</a>
-            </body></html>
-            """, 500
+            return "❌ No se pudo encontrar el archivo descargado", 500
 
         archivo = archivos[0]
-        ext = os.path.splitext(archivo)[1][1:]  # Obtener extensión sin el punto
+        ext = os.path.splitext(archivo)[1][1:]
         
         def generar():
             try:
                 with open(archivo, 'rb') as f:
-                    while True:
-                        chunk = f.read(8192)  # Chunks más pequeños para mejor streaming
-                        if not chunk:
-                            break
+                    while chunk := f.read(8192):
                         yield chunk
             finally:
-                # Limpiar el archivo después de enviarlo
                 if os.path.exists(archivo):
-                    try:
-                        os.remove(archivo)
-                    except:
-                        pass
+                    os.remove(archivo)
 
-        # Determinar el mimetype correcto
-        mimetypes = {
-            'mp4': 'video/mp4',
-            'webm': 'video/webm',
-            'mkv': 'video/x-matroska',
-            '3gp': 'video/3gpp',
-        }
-        mimetype = mimetypes.get(ext, 'video/mp4')
-
-        response = Response(
+        return Response(
             stream_with_context(generar()),
-            mimetype=mimetype
+            mimetype=f'video/{ext}',
+            headers={'Content-Disposition': f'attachment; filename="{titulo}.{ext}"'}
         )
-        response.headers['Content-Disposition'] = f'attachment; filename="{titulo}.{ext}"'
-        response.headers['Content-Type'] = mimetype
-        
-        print(f"✅ Video listo para descargar: {titulo}.{ext}")
-        return response
         
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ Error: {error_msg}")
         
-        # Mensaje de error amigable
-        mensaje_error = "Error al procesar el video"
-        if "Video unavailable" in error_msg:
-            mensaje_error = "El video no está disponible o es privado"
-        elif "Private video" in error_msg:
-            mensaje_error = "Este video es privado"
-        elif "sign in" in error_msg.lower():
-            mensaje_error = "Se requiere autenticación para este video"
+        if "Sign in to confirm you're not a bot" in error_msg:
+            return """
+            <html><body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                <h2>🤖 Detectado como bot</h2>
+                <p>YouTube está bloqueando la descarga. Esto puede deberse a:</p>
+                <ul style="text-align: left; display: inline-block;">
+                    <li>Cookies inválidas o expiradas</li>
+                    <li>Demasiadas descargas en poco tiempo</li>
+                    <li>Formato de cookies incorrecto</li>
+                </ul>
+                <br>
+                <a href="/configurar" style="color: #667eea; font-weight: bold;">🔧 Reconfigurar cookies</a>
+                <br><br>
+                <a href="/" style="color: #666;">⬅️ Volver</a>
+            </body></html>
+            """, 500
         
-        return f"""
-        <html><body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h2>❌ {mensaje_error}</h2>
-            <p style="color: #666; font-size: 14px;">{error_msg[:200]}</p>
-            <br>
-            <a href="/" style="color: #667eea; text-decoration: none; padding: 10px 20px; background: #f0f0f0; border-radius: 5px;">⬅️ Volver</a>
-        </body></html>
-        """, 500
+        return f"❌ Error: {error_msg[:200]}", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
