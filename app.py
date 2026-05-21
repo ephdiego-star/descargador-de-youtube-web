@@ -101,10 +101,17 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-    # Configuración optimizada para la Web (Calidad estándar sin necesidad de FFmpeg)
+    # Configuración avanzada con cabeceras simuladas para evitar bloqueos por bot en la nube
     opciones = {
         'format': 'best',
         'quiet': True,
+        'no_warnings': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        }
     }
 
     try:
