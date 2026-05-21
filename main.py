@@ -1,12 +1,35 @@
 import os
 import glob
 import yt_dlp
+import shutil
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
-COOKIES_PATH = 'cookies.txt'
 
-# ... [El resto del HTML igual] ...
+# Definimos las cookies en la raíz donde las subiste a GitHub
+COOKIES_SOURCE = 'cookies.txt'
+COOKIES_DEST = '/tmp/cookies.txt'
+
+# Copiamos las cookies a /tmp al arrancar el servidor
+if os.path.exists(COOKIES_SOURCE):
+    shutil.copy(COOKIES_SOURCE, COOKIES_DEST)
+
+PAGINA_HTML = """
+<!DOCTYPE html>
+<html lang="es">
+<body>
+    <h1>Descargador</h1>
+    <form action="/descargar" method="GET">
+        <input type="text" name="url" placeholder="Pega el link aquí" required>
+        <button type="submit">Descargar</button>
+    </form>
+</body>
+</html>
+"""
+
+@app.route('/')
+def inicio():
+    return render_template_string(PAGINA_HTML)
 
 @app.route('/descargar', methods=['GET'])
 def descargar():
@@ -14,17 +37,15 @@ def descargar():
     if not video_url:
         return "No se recibió ninguna URL.", 400
 
-    # Esta configuración es la estándar de oro para servidores sin entorno gráfico
+    # Usamos ffmpeg (asegúrate de tener el nixpacks.toml con ffmpeg)
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'bestvideo+bestaudio/best', # Busca el mejor video + mejor audio
-        'merge_output_format': 'mp4',        # Une ambos en un MP4 final
+        'format': 'bestvideo+bestaudio/best',
+        'merge_output_format': 'mp4',
         'outtmpl': '/tmp/%(id)s.%(ext)s',
+        'cookiefile': COOKIES_DEST if os.path.exists(COOKIES_DEST) else None,
     }
-
-    if os.path.exists(COOKIES_PATH):
-        opciones['cookiefile'] = COOKIES_PATH
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
@@ -34,7 +55,7 @@ def descargar():
 
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
-            return "El video se descargó pero no se pudo unir (falta ffmpeg).", 500
+            return "No se pudo encontrar el archivo descargado.", 500
 
         archivo = archivos[0]
         ext = archivo.split('.')[-1]
@@ -55,4 +76,5 @@ def descargar():
         return f"Error técnico: {str(e)}", 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
