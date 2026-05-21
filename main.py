@@ -1,6 +1,6 @@
 import os
+import glob
 import yt_dlp
-import requests as req_lib
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
@@ -78,16 +78,15 @@ def descargar():
 
         video_id = info.get('id')
         titulo = info.get('title', 'video').replace('/', '-')
-        archivo = f'/tmp/{video_id}.mp4'
 
-        if not os.path.exists(archivo):
-            # Si no existe como .mp4, buscar cualquier archivo con ese ID
-            import glob
-            archivos = glob.glob(f'/tmp/{video_id}.*')
-            if archivos:
-                archivo = archivos[0]
-            else:
-                return "No se pudo generar el archivo.", 500
+        # Buscar cualquier archivo descargado con ese id
+        import glob
+        archivos = glob.glob(f'/tmp/{video_id}.*')
+        if not archivos:
+            return "No se encontró el archivo descargado.", 500
+
+        archivo = archivos[0]
+        ext = archivo.split('.')[-1]
 
         def generar():
             with open(archivo, 'rb') as f:
@@ -95,9 +94,6 @@ def descargar():
                     yield chunk
             os.remove(archivo)
 
-        # Obtener la extensión real del archivo
-        ext = archivo.split('.')[-1]
-        
         return Response(
             generar(),
             content_type=f'video/{ext}',
