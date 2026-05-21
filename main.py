@@ -52,10 +52,11 @@ def descargar():
     if not video_url:
         return "Por favor, introduce una URL válida.", 400
 
-opciones = {
-    'quiet': False,
-    'no_warnings': False,
-    'listformats': True,
+    opciones = {
+        'quiet': True,
+        'no_warnings': True,
+        'format': 'best[height<=480][ext=mp4]/best[height<=480]/best[ext=mp4]/best',  # Formato corregido
+        'merge_output_format': 'mp4',  # Asegura salida MP4
     }
 
     if os.path.exists(COOKIES_PATH):
@@ -66,11 +67,20 @@ opciones = {
             info = ydl.extract_info(video_url, download=False)
 
         url_directa = info.get('url')
-        titulo = info.get('title', 'video').replace('/', '-')
+        titulo = info.get('title', 'video').replace('/', '-').replace('\\', '-')
         ext = info.get('ext', 'mp4')
 
         if not url_directa:
-            return "No se encontró URL de descarga.", 500
+            # Si no hay URL directa, buscar en formatos
+            formats = info.get('formats', [])
+            for f in formats:
+                if f.get('url'):
+                    url_directa = f['url']
+                    ext = f.get('ext', 'mp4')
+                    break
+            
+            if not url_directa:
+                return "No se encontró URL de descarga para este video.", 500
 
         headers_yt = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -78,6 +88,7 @@ opciones = {
         }
 
         r = req_lib.get(url_directa, headers=headers_yt, stream=True, timeout=30)
+        r.raise_for_status()  # Verificar si la descarga es exitosa
 
         def generar():
             for chunk in r.iter_content(chunk_size=1024 * 256):
