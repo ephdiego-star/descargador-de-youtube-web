@@ -145,12 +145,12 @@ PAGINA_HTML = """
             <p class="section-title">📁 Formato:</p>
             <div class="format-selector">
                 <button type="button" id="videoBtn" class="format-btn active" 
-                        onclick="selectFormat('video')">🎬 Video MP4</button>
+                        onclick="selectFormat('video')">🎬 Video</button>
                 <button type="button" id="audioBtn" class="format-btn" 
                         onclick="selectFormat('audio')">🎵 Audio MP3</button>
             </div>
             
-            <p class="section-title">📺 Calidad de video:</p>
+            <p class="section-title">📺 Calidad:</p>
             <div class="quality-selector" id="qualitySelector">
                 <button type="button" id="q1080" class="quality-btn" 
                         onclick="selectQuality('1080p')">1080p</button>
@@ -236,14 +236,14 @@ PAGINA_HTML = """
             
             if (!url) {
                 e.preventDefault();
-                errorDiv.textContent = '❌ Por favor, ingresa un enlace de YouTube';
+                errorDiv.textContent = '❌ Ingresa un enlace de YouTube';
                 errorDiv.classList.add('show');
                 return false;
             }
             
             if (url.indexOf('youtube.com') === -1 && url.indexOf('youtu.be') === -1) {
                 e.preventDefault();
-                errorDiv.textContent = '❌ Ingresa un enlace válido de YouTube';
+                errorDiv.textContent = '❌ Enlace no válido';
                 errorDiv.classList.add('show');
                 return false;
             }
@@ -266,7 +266,6 @@ def cargar_cookies():
         if cookies_env:
             with open(COOKIES_PATH, 'w', encoding='utf-8') as f:
                 f.write(cookies_env)
-            logger.info("Cookies cargadas")
             return True
         return False
     except Exception as e:
@@ -294,21 +293,22 @@ def descargar():
 
         cargar_cookies()
 
-        # Configuración base
+        # Configuración ultra compatible
         opciones = {
             'quiet': True,
             'no_warnings': True,
             'outtmpl': '/tmp/%(id)s.%(ext)s',
             'socket_timeout': 30,
-            'retries': 5,
-            'fragment_retries': 5,
+            'retries': 10,
+            'fragment_retries': 10,
+            'extractor_retries': 5,
+            'ignoreerrors': True,  # Ignorar errores de formato
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
         }
 
         if formato == 'audio':
-            # Audio: formato simple que no requiere ffmpeg para combinar
             opciones['format'] = 'bestaudio/best'
             opciones['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
@@ -316,79 +316,92 @@ def descargar():
                 'preferredquality': '192',
             }]
         else:
-            # VIDEO: Usar formatos que NO requieren combinar (ya incluyen audio)
-            formatos_por_calidad = {
-                '1080p': [
-                    'best[height<=1080]',     # Formato único con video+audio
-                    'best[height<=720]',
-                    'best',
-                ],
-                '720p': [
+            # Lista de formatos a probar, del más específico al más genérico
+            if calidad == '1080p':
+                formatos_a_probar = [
+                    'best[height<=1080]',
                     'best[height<=720]',
                     'best[height<=480]',
                     'best',
-                ],
-                '480p': [
-                    'best[height<=480]',
-                    'best[height<=360]',
-                    'best',
-                ],
-                '360p': [
-                    'best[height<=360]',
                     'worst',
-                ],
-                'best': ['best'],
-            }
+                ]
+            elif calidad == '720p':
+                formatos_a_probar = [
+                    'best[height<=720]',
+                    'best[height<=480]',
+                    'best[height<=360]',
+                    'best',
+                    'worst',
+                ]
+            elif calidad == '480p':
+                formatos_a_probar = [
+                    'best[height<=480]',
+                    'best[height<=360]',
+                    'best',
+                    'worst',
+                ]
+            elif calidad == '360p':
+                formatos_a_probar = [
+                    'best[height<=360]',
+                    'best',
+                    'worst',
+                ]
+            else:  # 'best'
+                formatos_a_probar = [
+                    'best',
+                    'worst',
+                ]
             
-            formatos = formatos_por_calidad.get(calidad, formatos_por_calidad['720p'])
-            opciones['format'] = '/'.join(formatos)
+            opciones['format'] = '/'.join(formatos_a_probar)
 
         if os.path.exists(COOKIES_PATH):
             opciones['cookiefile'] = COOKIES_PATH
 
-        # Descargar
-        logger.info(f"Usando formato: {opciones['format']}")
+        # Intentar descargar con cada formato
+        info = None
+        ultimo_error = None
         
-        try:
-            with yt_dlp.YoutubeDL(opciones) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-        except Exception as e:
-            error_msg = str(e)
-            logger.warning(f"Error: {error_msg}")
-            
-            # Si falla, intentar con el formato más simple
-            if 'Requested format is not available' in error_msg:
-                logger.info("Intentando con formato más básico...")
-                opciones['format'] = 'best'
-                with yt_dlp.YoutubeDL(opciones) as ydl:
+        for intento, formato_str in enumerate(formatos_a_probar if formato == 'video' else ['bestaudio/best']):
+            try:
+                opciones_intento = opciones.copy()
+                opciones_intento['format'] = formato_str
+                logger.info(f"Intento {intento + 1}: {formato_str}")
+                
+                with yt_dlp.YoutubeDL(opciones_intento) as ydl:
                     info = ydl.extract_info(video_url, download=True)
-            else:
-                raise e
+                    logger.info(f"¡Éxito con formato: {formato_str}!")
+                    break
+                    
+            except Exception as e:
+                ultimo_error = str(e)
+                logger.warning(f"Falló formato {formato_str}: {ultimo_error}")
+                continue
+        
+        if not info:
+            return f"Error: No se pudo descargar. Último error: {ultimo_error}", 500
 
         video_id = info.get('id')
         titulo = info.get('title', 'video')
         titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
         
-        logger.info(f"Descargado: {titulo}")
+        altura = info.get('height', '?')
+        logger.info(f"Descargado: {titulo} ({altura}p)")
 
         # Buscar archivo
         archivos = glob.glob(f'/tmp/{video_id}.*')
         
         if not archivos:
-            return "Error: No se encontró el archivo", 500
+            return "Error: No se encontró el archivo descargado", 500
 
-        # Preferir MP4 para video, MP3 para audio
+        # Elegir mejor archivo
         if formato == 'audio':
-            archivos_filtrados = [f for f in archivos if f.endswith('.mp3')]
-            archivo = archivos_filtrados[0] if archivos_filtrados else archivos[0]
+            preferidos = [f for f in archivos if f.endswith('.mp3')]
         else:
-            archivos_filtrados = [f for f in archivos if f.endswith('.mp4')]
-            archivo = archivos_filtrados[0] if archivos_filtrados else archivos[0]
-
+            preferidos = [f for f in archivos if f.endswith('.mp4')]
+        
+        archivo = preferidos[0] if preferidos else archivos[0]
         ext = archivo.split('.')[-1]
         tamaño = os.path.getsize(archivo)
-        
-        logger.info(f"Archivo: {archivo} ({tamaño} bytes)")
 
         def generar():
             try:
@@ -407,30 +420,16 @@ def descargar():
                 except:
                     pass
 
-        mime_type = 'video/mp4' if ext == 'mp4' else 'audio/mpeg'
-
         return Response(
             generar(),
-            mimetype=mime_type,
+            mimetype='video/mp4' if ext == 'mp4' else 'audio/mpeg',
             headers={
                 'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
-                'Content-Length': str(tamaño),
             }
         )
 
-    except yt_dlp.utils.DownloadError as e:
-        error_msg = str(e)
-        logger.error(f"Error: {error_msg}")
-        
-        if 'Sign in to confirm' in error_msg:
-            return "Error: YouTube requiere autenticación. Configura YOUTUBE_COOKIES en Railway.", 500
-        elif 'Video unavailable' in error_msg:
-            return "Error: Video no disponible o privado.", 500
-        else:
-            return f"Error: {error_msg}", 500
-            
     except Exception as e:
-        logger.error(f"Error: {traceback.format_exc()}")
+        logger.error(f"Error final: {traceback.format_exc()}")
         return f"Error: {str(e)}", 500
 
 @app.route('/health')
