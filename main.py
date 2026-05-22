@@ -28,29 +28,29 @@ def descargar():
     video_url = request.args.get('url')
     if not video_url: return "No URL", 400
 
-    # Verificar y cargar cookies desde variable de entorno
+    # Cargar cookies desde variable de entorno
     cookies_env = os.environ.get('YOUTUBE_COOKIES')
     if cookies_env:
         with open(COOKIES_PATH, 'w') as f:
             f.write(cookies_env)
 
-    # Configuración Anti-Bot mejorada
+    # Configuración con formato flexible
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best',
+        'format': 'bv*+ba/b',  # El mejor video + mejor audio combinados
         'outtmpl': '/tmp/%(id)s.%(ext)s',
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['mweb', 'android'],
             }
-        }
+        },
     }
 
-    # Solo agregar cookies si el archivo existe
+    # Solo agregar cookies si existen
     if os.path.exists(COOKIES_PATH):
         opciones['cookiefile'] = COOKIES_PATH
 
@@ -64,13 +64,15 @@ def descargar():
         if not archivos: return "Error: No se encontró el archivo.", 500
 
         archivo = archivos[0]
+        ext = archivo.split('.')[-1]
+        
         def generar():
             with open(archivo, 'rb') as f:
                 while chunk := f.read(1024 * 256): yield chunk
             if os.path.exists(archivo): os.remove(archivo)
 
-        return Response(generar(), mimetype='video/mp4', 
-                        headers={'Content-Disposition': f'attachment; filename="{titulo}.mp4"'})
+        return Response(generar(), mimetype=f'video/{ext}', 
+                        headers={'Content-Disposition': f'attachment; filename="{titulo}.{ext}"'})
     except Exception as e:
         return f"Error técnico: {str(e)}", 500
 
