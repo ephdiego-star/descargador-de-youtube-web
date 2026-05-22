@@ -153,7 +153,7 @@ PAGINA_HTML = """
 <body>
     <div class="container">
         <h1>🎬 YouTube Downloader</h1>
-        <p class="subtitle">Descarga videos de YouTube fácilmente</p>
+        <p class="subtitle">Descarga videos en formato MP4 compatible</p>
         
         <form id="downloadForm" onsubmit="handleSubmit(event)">
             <input type="text" id="urlInput" name="url" 
@@ -161,19 +161,19 @@ PAGINA_HTML = """
             
             <div class="format-selector">
                 <button type="button" class="format-btn active" 
-                        onclick="selectFormat('video', this)">🎬 Video</button>
+                        onclick="selectFormat('video', this)">🎬 Video MP4</button>
                 <button type="button" class="format-btn" 
                         onclick="selectFormat('audio', this)">🎵 Audio MP3</button>
             </div>
             
             <input type="hidden" id="formatInput" name="format" value="video">
             
-            <button type="submit" id="downloadBtn">⬇️ Descargar</button>
+            <button type="submit" id="downloadBtn">⬇️ Descargar Video MP4</button>
         </form>
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Descargando, por favor espera...</p>
+            <p>Descargando y convirtiendo a MP4 compatible...</p>
         </div>
         
         <div class="error-message" id="errorMessage"></div>
@@ -188,7 +188,7 @@ PAGINA_HTML = """
             document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('downloadBtn').textContent = 
-                format === 'audio' ? '🎵 Descargar Audio MP3' : '⬇️ Descargar Video';
+                format === 'audio' ? '🎵 Descargar Audio MP3' : '⬇️ Descargar Video MP4';
         }
         
         function handleSubmit(event) {
@@ -219,9 +219,9 @@ PAGINA_HTML = """
             
             setTimeout(() => {
                 downloadBtn.disabled = false;
-                downloadBtn.textContent = selectedFormat === 'audio' ? '🎵 Descargar Audio MP3' : '⬇️ Descargar Video';
+                downloadBtn.textContent = selectedFormat === 'audio' ? '🎵 Descargar Audio MP3' : '⬇️ Descargar Video MP4';
                 loading.classList.remove('active');
-            }, 10000);
+            }, 15000);
         }
         
         function showError(message) {
@@ -240,16 +240,13 @@ def cargar_cookies():
     try:
         cookies_env = os.environ.get('YOUTUBE_COOKIES')
         if cookies_env:
-            logger.info("Cargando cookies desde variable de entorno")
+            logger.info("Cargando cookies...")
             with open(COOKIES_PATH, 'w', encoding='utf-8') as f:
                 f.write(cookies_env)
-            logger.info("Cookies guardadas correctamente")
             return True
-        else:
-            logger.warning("Variable YOUTUBE_COOKIES no encontrada")
-            return False
+        return False
     except Exception as e:
-        logger.error(f"Error cargando cookies: {e}")
+        logger.error(f"Error cookies: {e}")
         return False
 
 @app.route('/')
@@ -262,67 +259,81 @@ def descargar():
         video_url = request.args.get('url')
         formato = request.args.get('format', 'video')
         
-        logger.info(f"Descarga solicitada - URL: {video_url}, Formato: {formato}")
+        logger.info(f"Descargando: {video_url} - {formato}")
         
         if not video_url:
             return "Error: URL no proporcionada", 400
 
-        # Validar URL
-        if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
-            return "Error: URL no válida", 400
-
         # Cargar cookies
         cargar_cookies()
 
-        # Configurar opciones básicas
-        opciones = {
-            'quiet': True,
-            'no_warnings': True,
-            'outtmpl': '/tmp/%(id)s.%(ext)s',
-            'socket_timeout': 30,
-            'retries': 3,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            },
-        }
-
-        # Configurar formato
+        # Configuración para MP4 compatible con H.264
         if formato == 'audio':
-            opciones['format'] = 'bestaudio/best'
-            opciones['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }]
+            opciones = {
+                'quiet': True,
+                'no_warnings': True,
+                'outtmpl': '/tmp/%(id)s.%(ext)s',
+                'format': 'bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+                'socket_timeout': 30,
+                'retries': 3,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
+            }
         else:
-            # Formatos de video con fallback
-            opciones['format'] = 'best[height<=720]/best[height<=480]/best'
+            # VIDEO: Forzar MP4 con códec H.264 compatible
+            opciones = {
+                'quiet': True,
+                'no_warnings': True,
+                'outtmpl': '/tmp/%(id)s.%(ext)s',
+                # Descargar mejor video MP4 y mejor audio, luego combinar
+                'format': 'bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                'merge_output_format': 'mp4',  # Forzar MP4 como salida
+                'postprocessors': [{
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': 'mp4',  # Convertir a MP4 si es necesario
+                }],
+                'socket_timeout': 30,
+                'retries': 3,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
+            }
 
         # Añadir cookies si existen
         if os.path.exists(COOKIES_PATH):
             opciones['cookiefile'] = COOKIES_PATH
 
-        # Descargar video
-        logger.info("Iniciando descarga con yt-dlp...")
+        # Descargar
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(video_url, download=True)
             video_id = info.get('id')
             titulo = info.get('title', 'video')
-            # Limpiar título
             titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            logger.info(f"Descarga completada: {titulo}")
 
-        # Buscar archivo descargado
+        # Buscar archivo (preferir .mp4)
         archivos = glob.glob(f'/tmp/{video_id}.*')
         
-        if not archivos:
-            logger.error("No se encontró el archivo descargado")
+        # Priorizar MP4
+        archivo = None
+        for f in archivos:
+            if f.endswith('.mp4') or f.endswith('.mp3'):
+                archivo = f
+                break
+        if not archivo and archivos:
+            archivo = archivos[0]
+        
+        if not archivo:
             return "Error: Archivo no encontrado", 500
 
-        archivo = archivos[0]
         ext = archivo.split('.')[-1]
         tamaño = os.path.getsize(archivo)
-        logger.info(f"Archivo: {archivo} ({tamaño} bytes)")
+        logger.info(f"Archivo final: {archivo} ({tamaño} bytes) - Formato: {ext}")
 
         def generar():
             try:
@@ -336,13 +347,18 @@ def descargar():
                 try:
                     if os.path.exists(archivo):
                         os.remove(archivo)
-                        logger.info("Archivo temporal eliminado")
                 except:
                     pass
 
+        # MIME types correctos
+        mime_types = {
+            'mp4': 'video/mp4',
+            'mp3': 'audio/mpeg',
+        }
+        
         return Response(
             generar(),
-            mimetype='application/octet-stream',
+            mimetype=mime_types.get(ext, 'application/octet-stream'),
             headers={
                 'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
                 'Content-Length': str(tamaño),
@@ -351,29 +367,19 @@ def descargar():
 
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
-        logger.error(f"Error yt-dlp: {error_msg}")
-        
+        logger.error(f"Error: {error_msg}")
         if 'Sign in to confirm' in error_msg:
-            return "Error: YouTube requiere autenticación. Configura las cookies YOUTUBE_COOKIES en Railway.", 500
-        elif 'Video unavailable' in error_msg:
-            return "Error: Video no disponible o privado", 500
-        else:
-            return f"Error: {error_msg}", 500
+            return "Error: YouTube requiere cookies. Configura YOUTUBE_COOKIES en Railway.", 500
+        return f"Error de descarga: {error_msg}", 500
             
     except Exception as e:
-        logger.error(f"Error inesperado: {traceback.format_exc()}")
-        return f"Error interno: {str(e)}", 500
+        logger.error(f"Error: {traceback.format_exc()}")
+        return f"Error: {str(e)}", 500
 
 @app.route('/health')
 def health():
-    """Endpoint de salud"""
-    return {
-        'status': 'ok',
-        'cookies': os.path.exists(COOKIES_PATH),
-        'ffmpeg': os.system('which ffmpeg > /dev/null 2>&1') == 0,
-    }
+    return {'status': 'ok', 'cookies': os.path.exists(COOKIES_PATH)}
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    logger.info(f"Iniciando en puerto {port}")
     app.run(host='0.0.0.0', port=port)
