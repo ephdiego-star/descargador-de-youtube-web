@@ -41,114 +41,97 @@ PAGINA_HTML = """
             background: rgba(255, 255, 255, 0.95);
             border-radius: 24px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 40px;
+            padding: 30px;
             max-width: 500px;
             width: 100%;
         }
-        h1 { 
-            color: #1a1a1a; 
-            font-size: 28px; 
-            font-weight: 700; 
-            margin-bottom: 10px; 
-            text-align: center; 
-        }
-        .subtitle { 
-            color: #666; 
-            text-align: center; 
-            margin-bottom: 30px; 
-            font-size: 14px; 
-        }
+        h1 { color: #1a1a1a; font-size: 26px; font-weight: 700; margin-bottom: 8px; text-align: center; }
+        .subtitle { color: #666; text-align: center; margin-bottom: 25px; font-size: 13px; }
         input[type="text"] {
-            width: 100%; 
-            padding: 16px; 
-            border: 2px solid #e0e0e0;
-            border-radius: 12px; 
-            font-size: 15px; 
-            margin-bottom: 15px;
-            background: #f8f9fa; 
-            outline: none;
+            width: 100%; padding: 14px; border: 2px solid #e0e0e0;
+            border-radius: 10px; font-size: 14px; margin-bottom: 12px;
+            background: #f8f9fa; outline: none;
         }
-        input[type="text"]:focus { 
-            border-color: #667eea; 
-            background: white; 
+        input[type="text"]:focus { border-color: #667eea; background: white; }
+        
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            text-align: center;
         }
-        .format-selector { 
+        
+        .format-selector, .quality-selector { 
             display: flex; 
-            gap: 10px; 
-            margin-bottom: 15px; 
+            gap: 8px; 
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
-        .format-btn {
-            flex: 1; 
-            padding: 12px; 
+        .format-btn, .quality-btn {
+            padding: 10px 14px; 
             border: 2px solid #667eea;
             background: white; 
             color: #667eea; 
-            border-radius: 10px;
+            border-radius: 8px;
             cursor: pointer; 
-            font-size: 14px;
+            font-size: 13px;
             transition: all 0.3s;
         }
-        .format-btn.active { 
+        .format-btn.active, .quality-btn.active { 
             background: #667eea; 
             color: white; 
         }
-        .format-btn:hover {
+        .format-btn:hover, .quality-btn:hover {
             background: #667eea;
             color: white;
         }
         button[type="submit"] {
             width: 100%; 
-            padding: 16px;
+            padding: 14px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white; 
             border: none; 
-            border-radius: 12px;
-            font-size: 16px; 
+            border-radius: 10px;
+            font-size: 15px; 
             font-weight: 600; 
             cursor: pointer; 
-            margin-bottom: 10px;
+            margin-top: 5px;
             transition: transform 0.2s;
         }
-        button[type="submit"]:hover { 
-            transform: translateY(-2px); 
-        }
-        button[type="submit"]:active { 
-            transform: translateY(0); 
-        }
+        button[type="submit"]:hover { transform: translateY(-2px); }
         .error-message {
             display: none; 
             background: #fee; 
             color: #c33;
-            padding: 12px; 
+            padding: 10px; 
             border-radius: 8px; 
-            margin-top: 15px;
+            margin-top: 12px;
             text-align: center; 
-            font-size: 14px;
+            font-size: 13px;
         }
-        .error-message.show { 
-            display: block; 
-        }
+        .error-message.show { display: block; }
         .loading {
             display: none; 
             text-align: center; 
-            margin-top: 20px;
+            margin-top: 15px;
         }
-        .loading.show { 
-            display: block; 
-        }
+        .loading.show { display: block; }
         .spinner {
             border: 3px solid #e0e0e0; 
             border-top: 3px solid #667eea;
             border-radius: 50%; 
-            width: 40px; 
-            height: 40px;
+            width: 35px; 
+            height: 35px;
             animation: spin 1s linear infinite; 
-            margin: 0 auto 10px;
+            margin: 0 auto 8px;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .quality-selector.hidden { display: none; }
     </style>
 </head>
 <body>
@@ -160,6 +143,7 @@ PAGINA_HTML = """
             <input type="text" id="urlInput" name="url" 
                    placeholder="Pega el enlace de YouTube aquí..." required>
             
+            <p class="section-title">📁 Formato:</p>
             <div class="format-selector">
                 <button type="button" id="videoBtn" class="format-btn active" 
                         onclick="selectFormat('video')">🎬 Video MP4</button>
@@ -167,9 +151,24 @@ PAGINA_HTML = """
                         onclick="selectFormat('audio')">🎵 Audio MP3</button>
             </div>
             
-            <input type="hidden" id="formatInput" name="format" value="video">
+            <p class="section-title">📺 Calidad de video:</p>
+            <div class="quality-selector" id="qualitySelector">
+                <button type="button" id="q1080" class="quality-btn" 
+                        onclick="selectQuality('1080p')">1080p</button>
+                <button type="button" id="q720" class="quality-btn active" 
+                        onclick="selectQuality('720p')">720p</button>
+                <button type="button" id="q480" class="quality-btn" 
+                        onclick="selectQuality('480p')">480p</button>
+                <button type="button" id="q360" class="quality-btn" 
+                        onclick="selectQuality('360p')">360p</button>
+                <button type="button" id="qbest" class="quality-btn" 
+                        onclick="selectQuality('best')">✨ Mejor</button>
+            </div>
             
-            <button type="submit" id="downloadBtn">⬇️ Descargar Video MP4</button>
+            <input type="hidden" id="formatInput" name="format" value="video">
+            <input type="hidden" id="qualityInput" name="quality" value="720p">
+            
+            <button type="submit" id="downloadBtn">⬇️ Descargar Video 720p</button>
         </form>
         
         <div class="loading" id="loading">
@@ -181,18 +180,55 @@ PAGINA_HTML = """
     </div>
 
     <script>
+        var currentFormat = 'video';
+        var currentQuality = '720p';
+        
         function selectFormat(format) {
+            currentFormat = format;
             document.getElementById('formatInput').value = format;
+            
             document.getElementById('videoBtn').classList.remove('active');
             document.getElementById('audioBtn').classList.remove('active');
             
             if (format === 'video') {
                 document.getElementById('videoBtn').classList.add('active');
-                document.getElementById('downloadBtn').textContent = '⬇️ Descargar Video MP4';
+                document.getElementById('qualitySelector').classList.remove('hidden');
+                updateButtonText();
             } else {
                 document.getElementById('audioBtn').classList.add('active');
+                document.getElementById('qualitySelector').classList.add('hidden');
                 document.getElementById('downloadBtn').textContent = '🎵 Descargar Audio MP3';
             }
+        }
+        
+        function selectQuality(quality) {
+            currentQuality = quality;
+            document.getElementById('qualityInput').value = quality;
+            
+            // Reset all quality buttons
+            document.querySelectorAll('.quality-btn').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
+            
+            // Activate selected
+            var btnId = 'q' + quality.replace('p', '');
+            if (quality === 'best') btnId = 'qbest';
+            var activeBtn = document.getElementById(btnId);
+            if (activeBtn) activeBtn.classList.add('active');
+            
+            updateButtonText();
+        }
+        
+        function updateButtonText() {
+            var qualityNames = {
+                '1080p': '1080p Full HD',
+                '720p': '720p HD',
+                '480p': '480p SD',
+                '360p': '360p',
+                'best': 'Mejor Calidad'
+            };
+            document.getElementById('downloadBtn').textContent = 
+                '⬇️ Descargar Video ' + qualityNames[currentQuality];
         }
         
         document.getElementById('downloadForm').addEventListener('submit', function(e) {
@@ -277,8 +313,9 @@ def descargar():
     try:
         video_url = request.args.get('url')
         formato = request.args.get('format', 'video')
+        calidad = request.args.get('quality', '720p')
         
-        logger.info(f"Descargando: {video_url} - {formato}")
+        logger.info(f"Descargando: {video_url} - {formato} - {calidad}")
         
         if not video_url:
             return "Error: URL no proporcionada", 400
@@ -288,7 +325,7 @@ def descargar():
 
         cargar_cookies()
 
-        # Configuración SIMPLE - descargar lo que esté disponible
+        # Configuración base
         opciones = {
             'quiet': True,
             'no_warnings': True,
@@ -302,7 +339,7 @@ def descargar():
         }
 
         if formato == 'audio':
-            # Solo audio
+            # Audio: ignora calidad
             opciones['format'] = 'bestaudio/best'
             opciones['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
@@ -310,31 +347,57 @@ def descargar():
                 'preferredquality': '192',
             }]
         else:
-            # VIDEO: Descargar el mejor formato único que incluya video y audio
-            # Si no existe, descargar video y audio por separado
-            opciones['format'] = 'best'  # El mejor formato único con video+audio
+            # Video con calidad seleccionada
+            # Sistema de fallback automático
+            formatos_por_calidad = {
+                '1080p': [
+                    'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+                    'bestvideo[height<=720]+bestaudio/best[height<=720]',
+                    'best',
+                ],
+                '720p': [
+                    'bestvideo[height<=720]+bestaudio/best[height<=720]',
+                    'bestvideo[height<=480]+bestaudio/best[height<=480]',
+                    'best',
+                ],
+                '480p': [
+                    'bestvideo[height<=480]+bestaudio/best[height<=480]',
+                    'bestvideo[height<=360]+bestaudio/best[height<=360]',
+                    'best',
+                ],
+                '360p': [
+                    'bestvideo[height<=360]+bestaudio/best[height<=360]',
+                    'worst',
+                ],
+                'best': ['best'],
+            }
+            
+            formatos = formatos_por_calidad.get(calidad, formatos_por_calidad['720p'])
+            opciones['format'] = '/'.join(formatos)  # yt-dlp probará cada uno en orden
 
         if os.path.exists(COOKIES_PATH):
             opciones['cookiefile'] = COOKIES_PATH
 
-        # Primer intento con formato simple
+        # Descargar con múltiples intentos
+        logger.info(f"Intentando formatos: {opciones['format']}")
+        
         try:
             with yt_dlp.YoutubeDL(opciones) as ydl:
                 info = ydl.extract_info(video_url, download=True)
         except Exception as e:
             error_msg = str(e)
-            logger.warning(f"Primer intento falló: {error_msg}")
+            logger.warning(f"Falló con calidad {calidad}: {error_msg}")
             
-            # Si falla, intentar descargar video y audio por separado
-            if 'Requested format is not available' in error_msg and formato == 'video':
-                logger.info("Intentando descargar video y audio por separado...")
-                opciones['format'] = 'bestvideo*+bestaudio/bestvideo+bestaudio'
+            # Si falla, intentar con 'best'
+            if 'Requested format is not available' in error_msg:
+                logger.info("Intentando con mejor calidad disponible...")
+                opciones['format'] = 'best'
                 try:
                     with yt_dlp.YoutubeDL(opciones) as ydl:
                         info = ydl.extract_info(video_url, download=True)
                 except:
-                    # Último intento: cualquier formato disponible
-                    opciones['format'] = 'bestvideo,bestaudio/best'
+                    # Último intento
+                    opciones['format'] = 'worst'
                     with yt_dlp.YoutubeDL(opciones) as ydl:
                         info = ydl.extract_info(video_url, download=True)
             else:
@@ -344,11 +407,12 @@ def descargar():
         titulo = info.get('title', 'video')
         titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
         
-        logger.info(f"Descargado: {titulo}")
+        # Obtener altura real del video descargado
+        altura_real = info.get('height', '?')
+        logger.info(f"Descargado: {titulo} - Altura real: {altura_real}p")
 
-        # Buscar todos los archivos descargados
+        # Buscar archivos
         archivos = glob.glob(f'/tmp/{video_id}.*')
-        logger.info(f"Archivos encontrados: {archivos}")
         
         if not archivos:
             return "Error: No se encontró el archivo", 500
@@ -363,18 +427,14 @@ def descargar():
             if archivos_mp4:
                 archivo = archivos_mp4[0]
             else:
-                # Si no hay MP4, usar el primer archivo y convertir
                 archivo = archivos[0]
                 if not archivo.endswith('.mp4'):
                     nuevo = convertir_a_mp4(archivo)
                     if nuevo:
                         archivo = nuevo
-                    else:
-                        return "Error: No se pudo convertir a MP4", 500
 
         ext = archivo.split('.')[-1]
         tamaño = os.path.getsize(archivo)
-        logger.info(f"Archivo final: {archivo} ({tamaño} bytes)")
 
         def generar():
             try:
@@ -406,18 +466,18 @@ def descargar():
 
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
-        logger.error(f"Error descarga: {error_msg}")
+        logger.error(f"Error: {error_msg}")
         
         if 'Sign in to confirm' in error_msg:
             return "Error: YouTube requiere autenticación. Configura YOUTUBE_COOKIES en Railway.", 500
         elif 'Video unavailable' in error_msg:
             return "Error: Video no disponible o privado.", 500
         else:
-            return f"Error de descarga: {error_msg}", 500
+            return f"Error: {error_msg}", 500
             
     except Exception as e:
         logger.error(f"Error: {traceback.format_exc()}")
-        return f"Error interno: {str(e)}", 500
+        return f"Error: {str(e)}", 500
 
 @app.route('/health')
 def health():
