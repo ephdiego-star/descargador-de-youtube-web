@@ -5,7 +5,7 @@ import traceback
 import sys
 import logging
 import subprocess
-from flask import Flask, render_template_string, request, Response, redirect
+from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
 
@@ -183,8 +183,6 @@ PAGINA_HTML = """
     <script>
         function selectFormat(format) {
             document.getElementById('formatInput').value = format;
-            
-            // Actualizar botones
             document.getElementById('videoBtn').classList.remove('active');
             document.getElementById('audioBtn').classList.remove('active');
             
@@ -201,10 +199,8 @@ PAGINA_HTML = """
             var url = document.getElementById('urlInput').value.trim();
             var errorDiv = document.getElementById('errorMessage');
             
-            // Ocultar error anterior
             errorDiv.classList.remove('show');
             
-            // Validar URL
             if (!url) {
                 e.preventDefault();
                 errorDiv.textContent = '❌ Por favor, ingresa un enlace de YouTube';
@@ -219,12 +215,10 @@ PAGINA_HTML = """
                 return false;
             }
             
-            // Mostrar loading
             document.getElementById('loading').classList.add('show');
             document.getElementById('downloadBtn').textContent = '⏳ Procesando...';
             document.getElementById('downloadBtn').style.opacity = '0.6';
             
-            // El formulario se envía normalmente
             return true;
         });
     </script>
@@ -239,20 +233,18 @@ def cargar_cookies():
         if cookies_env:
             with open(COOKIES_PATH, 'w', encoding='utf-8') as f:
                 f.write(cookies_env)
-            logger.info("Cookies cargadas correctamente")
+            logger.info("Cookies cargadas")
             return True
-        else:
-            logger.warning("Variable YOUTUBE_COOKIES no encontrada")
-            return False
+        return False
     except Exception as e:
-        logger.error(f"Error al cargar cookies: {e}")
+        logger.error(f"Error cookies: {e}")
         return False
 
 def convertir_a_mp4(archivo_entrada):
-    """Convierte cualquier video a MP4 con H.264"""
+    """Convierte video a MP4 con H.264"""
     archivo_salida = archivo_entrada.rsplit('.', 1)[0] + '.mp4'
     
-    logger.info(f"Convirtiendo {archivo_entrada} a MP4...")
+    logger.info(f"Convirtiendo a MP4: {archivo_entrada}")
     
     comando = [
         'ffmpeg', '-i', archivo_entrada,
@@ -269,14 +261,11 @@ def convertir_a_mp4(archivo_entrada):
     try:
         resultado = subprocess.run(comando, capture_output=True, text=True, timeout=300)
         if resultado.returncode == 0:
-            logger.info(f"Conversión exitosa: {archivo_salida}")
             os.remove(archivo_entrada)
             return archivo_salida
-        else:
-            logger.error(f"Error ffmpeg: {resultado.stderr}")
-            return None
+        return None
     except Exception as e:
-        logger.error(f"Error en conversión: {e}")
+        logger.error(f"Error conversión: {e}")
         return None
 
 @app.route('/')
@@ -289,7 +278,7 @@ def descargar():
         video_url = request.args.get('url')
         formato = request.args.get('format', 'video')
         
-        logger.info(f"Descarga solicitada - URL: {video_url}, Formato: {formato}")
+        logger.info(f"Descargando: {video_url} - {formato}")
         
         if not video_url:
             return "Error: URL no proporcionada", 400
@@ -297,22 +286,23 @@ def descargar():
         if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
             return "Error: URL no válida", 400
 
-        # Cargar cookies
         cargar_cookies()
 
-        # Configuración de descarga
+        # Configuración SIMPLE - descargar lo que esté disponible
         opciones = {
             'quiet': True,
             'no_warnings': True,
             'outtmpl': '/tmp/%(id)s.%(ext)s',
             'socket_timeout': 30,
-            'retries': 3,
+            'retries': 5,
+            'fragment_retries': 5,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
         }
 
         if formato == 'audio':
+            # Solo audio
             opciones['format'] = 'bestaudio/best'
             opciones['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
@@ -320,38 +310,71 @@ def descargar():
                 'preferredquality': '192',
             }]
         else:
-            opciones['format'] = 'bestvideo+bestaudio/best'
-            opciones['merge_output_format'] = 'mp4'
+            # VIDEO: Descargar el mejor formato único que incluya video y audio
+            # Si no existe, descargar video y audio por separado
+            opciones['format'] = 'best'  # El mejor formato único con video+audio
 
-        # Añadir cookies si existen
         if os.path.exists(COOKIES_PATH):
             opciones['cookiefile'] = COOKIES_PATH
 
-        # Descargar
-        with yt_dlp.YoutubeDL(opciones) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            video_id = info.get('id')
-            titulo = info.get('title', 'video')
-            titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        # Primer intento con formato simple
+        try:
+            with yt_dlp.YoutubeDL(opciones) as ydl:
+                info = ydl.extract_info(video_url, download=True)
+        except Exception as e:
+            error_msg = str(e)
+            logger.warning(f"Primer intento falló: {error_msg}")
+            
+            # Si falla, intentar descargar video y audio por separado
+            if 'Requested format is not available' in error_msg and formato == 'video':
+                logger.info("Intentando descargar video y audio por separado...")
+                opciones['format'] = 'bestvideo*+bestaudio/bestvideo+bestaudio'
+                try:
+                    with yt_dlp.YoutubeDL(opciones) as ydl:
+                        info = ydl.extract_info(video_url, download=True)
+                except:
+                    # Último intento: cualquier formato disponible
+                    opciones['format'] = 'bestvideo,bestaudio/best'
+                    with yt_dlp.YoutubeDL(opciones) as ydl:
+                        info = ydl.extract_info(video_url, download=True)
+            else:
+                raise e
 
-        # Buscar archivo
+        video_id = info.get('id')
+        titulo = info.get('title', 'video')
+        titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        
+        logger.info(f"Descargado: {titulo}")
+
+        # Buscar todos los archivos descargados
         archivos = glob.glob(f'/tmp/{video_id}.*')
+        logger.info(f"Archivos encontrados: {archivos}")
         
         if not archivos:
             return "Error: No se encontró el archivo", 500
 
-        archivo = archivos[0]
-        
-        # Convertir a MP4 si es necesario
-        if formato == 'video' and not archivo.endswith('.mp4'):
-            nuevo_archivo = convertir_a_mp4(archivo)
-            if nuevo_archivo:
-                archivo = nuevo_archivo
+        # Para audio, buscar MP3
+        if formato == 'audio':
+            archivos_mp3 = [f for f in archivos if f.endswith('.mp3')]
+            archivo = archivos_mp3[0] if archivos_mp3 else archivos[0]
+        else:
+            # Para video, preferir MP4
+            archivos_mp4 = [f for f in archivos if f.endswith('.mp4')]
+            if archivos_mp4:
+                archivo = archivos_mp4[0]
             else:
-                return "Error: No se pudo convertir a MP4", 500
+                # Si no hay MP4, usar el primer archivo y convertir
+                archivo = archivos[0]
+                if not archivo.endswith('.mp4'):
+                    nuevo = convertir_a_mp4(archivo)
+                    if nuevo:
+                        archivo = nuevo
+                    else:
+                        return "Error: No se pudo convertir a MP4", 500
 
         ext = archivo.split('.')[-1]
         tamaño = os.path.getsize(archivo)
+        logger.info(f"Archivo final: {archivo} ({tamaño} bytes)")
 
         def generar():
             try:
@@ -370,17 +393,31 @@ def descargar():
                 except:
                     pass
 
+        mime_type = 'video/mp4' if ext == 'mp4' else 'audio/mpeg'
+
         return Response(
             generar(),
-            mimetype='video/mp4' if ext == 'mp4' else 'audio/mpeg',
+            mimetype=mime_type,
             headers={
                 'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
+                'Content-Length': str(tamaño),
             }
         )
 
+    except yt_dlp.utils.DownloadError as e:
+        error_msg = str(e)
+        logger.error(f"Error descarga: {error_msg}")
+        
+        if 'Sign in to confirm' in error_msg:
+            return "Error: YouTube requiere autenticación. Configura YOUTUBE_COOKIES en Railway.", 500
+        elif 'Video unavailable' in error_msg:
+            return "Error: Video no disponible o privado.", 500
+        else:
+            return f"Error de descarga: {error_msg}", 500
+            
     except Exception as e:
         logger.error(f"Error: {traceback.format_exc()}")
-        return f"Error: {str(e)}", 500
+        return f"Error interno: {str(e)}", 500
 
 @app.route('/health')
 def health():
