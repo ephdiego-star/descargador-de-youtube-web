@@ -175,6 +175,66 @@ PAGINA_HTML = """
             transform: translateY(0);
         }
 
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #e0e0e0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            display: none;
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+
+        .progress-bar.active {
+            display: block;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            border-radius: 3px;
+            animation: progress 2s ease-in-out infinite;
+        }
+
+        @keyframes progress {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+
         .features {
             display: flex;
             justify-content: space-around;
@@ -207,6 +267,21 @@ PAGINA_HTML = """
             margin-top: 20px;
         }
 
+        .error-message {
+            display: none;
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
         @media (max-width: 480px) {
             .container {
                 padding: 30px 20px;
@@ -231,13 +306,25 @@ PAGINA_HTML = """
         <h1>YouTube Downloader</h1>
         <p class="subtitle">Descarga tus videos favoritos al instante</p>
         
-        <form action="/descargar" method="GET">
+        <form id="downloadForm" onsubmit="handleSubmit(event)">
             <div class="input-group">
                 <span class="input-icon">🔗</span>
-                <input type="text" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
+                <input type="text" id="urlInput" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
             </div>
-            <button type="submit">⬇️ Descargar Video</button>
+            <button type="submit" id="downloadBtn">⬇️ Descargar Video</button>
         </form>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Descargando video...</p>
+            <p style="font-size: 12px; color: #999;">Esto puede tardar unos momentos</p>
+        </div>
+        
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill"></div>
+        </div>
+        
+        <div class="error-message" id="errorMessage"></div>
         
         <div class="features">
             <div class="feature">
@@ -260,6 +347,60 @@ PAGINA_HTML = """
         
         <div class="version">v2.0 • YouTube Downloader</div>
     </div>
+
+    <script>
+        function handleSubmit(event) {
+            event.preventDefault();
+            
+            const urlInput = document.getElementById('urlInput');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const loading = document.getElementById('loading');
+            const progressBar = document.getElementById('progressBar');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            // Reset estados
+            errorMessage.classList.remove('active');
+            errorMessage.textContent = '';
+            
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                showError('Por favor, ingresa un enlace de YouTube');
+                return;
+            }
+            
+            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+                showError('Por favor, ingresa un enlace válido de YouTube');
+                return;
+            }
+            
+            // Mostrar loading
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = '⏳ Descargando...';
+            loading.classList.add('active');
+            progressBar.classList.add('active');
+            
+            // Iniciar descarga
+            window.location.href = '/descargar?url=' + encodeURIComponent(url);
+            
+            // Simular progreso (la descarga real redirige)
+            setTimeout(() => {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = '⬇️ Descargar Video';
+                loading.classList.remove('active');
+                progressBar.classList.remove('active');
+            }, 10000);
+        }
+        
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+            setTimeout(() => {
+                errorMessage.classList.remove('active');
+            }, 5000);
+        }
+    </script>
 </body>
 </html>
 """
@@ -271,20 +412,36 @@ def inicio():
 @app.route('/descargar', methods=['GET'])
 def descargar():
     video_url = request.args.get('url')
-    if not video_url: return "No URL", 400
+    if not video_url:
+        return "Error: No se proporcionó una URL", 400
+
+    # Validar URL de YouTube
+    if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
+        return "Error: URL no válida. Debe ser un enlace de YouTube", 400
 
     # Cargar cookies desde variable de entorno
     cookies_env = os.environ.get('YOUTUBE_COOKIES')
     if cookies_env:
-        with open(COOKIES_PATH, 'w') as f:
-            f.write(cookies_env)
+        try:
+            with open(COOKIES_PATH, 'w') as f:
+                f.write(cookies_env)
+        except Exception as e:
+            return f"Error al guardar cookies: {str(e)}", 500
 
-    # Configuración con formato flexible
+    # Configuración mejorada con timeouts y reintentos
     opciones = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'bv*+ba/b',
+        'format': 'bv*[height<=720]+ba/b',  # Máximo 720p para descarga más rápida
         'outtmpl': '/tmp/%(id)s.%(ext)s',
+        'socket_timeout': 30,        # Timeout de conexión de red
+        'retries': 5,                # Reintentos automáticos
+        'extractor_retries': 3,      # Reintentos del extractor
+        'fragment_retries': 5,       # Reintentos de fragmentos DASH
+        'retry_sleep_functions': {
+            'http': lambda n: 2,     # Espera 2 segundos entre reintentos HTTP
+            'fragment': lambda n: 1, # Espera 1 segundo entre fragmentos
+        },
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
@@ -302,23 +459,89 @@ def descargar():
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(video_url, download=True)
             video_id = info.get('id')
-            titulo = info.get('title', 'video').replace('/', '-')
-
-        archivos = glob.glob(f'/tmp/{video_id}.*')
-        if not archivos: return "Error: No se encontró el archivo.", 500
-
-        archivo = archivos[0]
-        ext = archivo.split('.')[-1]
+            titulo = info.get('title', 'video').replace('/', '-').replace('\\', '-')
+            
+    except yt_dlp.utils.DownloadError as e:
+        # Limpiar archivos temporales en caso de error
+        if os.path.exists(COOKIES_PATH):
+            os.remove(COOKIES_PATH)
+        return f"Error de descarga: {str(e)}", 500
         
-        def generar():
-            with open(archivo, 'rb') as f:
-                while chunk := f.read(1024 * 256): yield chunk
-            if os.path.exists(archivo): os.remove(archivo)
-
-        return Response(generar(), mimetype=f'video/{ext}', 
-                        headers={'Content-Disposition': f'attachment; filename="{titulo}.{ext}"'})
     except Exception as e:
+        if os.path.exists(COOKIES_PATH):
+            os.remove(COOKIES_PATH)
         return f"Error técnico: {str(e)}", 500
 
+    # Buscar el archivo descargado
+    archivos = glob.glob(f'/tmp/{video_id}.*')
+    if not archivos:
+        if os.path.exists(COOKIES_PATH):
+            os.remove(COOKIES_PATH)
+        return "Error: No se encontró el archivo descargado", 500
+
+    archivo = archivos[0]
+    ext = archivo.split('.')[-1]
+    
+    # Mapear extensiones a tipos MIME
+    mime_types = {
+        'mp4': 'video/mp4',
+        'webm': 'video/webm',
+        'mkv': 'video/x-matroska',
+        'mp3': 'audio/mpeg',
+        'm4a': 'audio/mp4',
+        'opus': 'audio/opus',
+    }
+    
+    mimetype = mime_types.get(ext, 'application/octet-stream')
+    
+    def generar():
+        try:
+            with open(archivo, 'rb') as f:
+                while True:
+                    chunk = f.read(1024 * 256)  # 256KB chunks
+                    if not chunk:
+                        break
+                    yield chunk
+        finally:
+            # Limpiar archivos temporales
+            try:
+                if os.path.exists(archivo):
+                    os.remove(archivo)
+                if os.path.exists(COOKIES_PATH):
+                    os.remove(COOKIES_PATH)
+            except:
+                pass  # Ignorar errores de limpieza
+
+    # Crear respuesta con streaming
+    response = Response(
+        generar(),
+        mimetype=mimetype,
+        headers={
+            'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
+            'Content-Length': str(os.path.getsize(archivo)),
+            'X-Content-Type-Options': 'nosniff',
+        }
+    )
+    
+    return response
+
+# Manejo de errores personalizado
+@app.errorhandler(404)
+def not_found(e):
+    return "Página no encontrada", 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return "Error interno del servidor", 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    # Configuración para desarrollo
+    port = int(os.environ.get('PORT', 8080))
+    debug = os.environ.get('DEBUG', 'False').lower() == 'true'
+    
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=debug,
+        threaded=True  # Permite manejar múltiples solicitudes
+    )
