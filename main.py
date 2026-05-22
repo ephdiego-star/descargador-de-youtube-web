@@ -1,10 +1,21 @@
 import os
 import glob
 import yt_dlp
+import traceback
+import sys
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
 COOKIES_PATH = '/tmp/cookies.txt'
+
+# Configurar logging para ver errores detallados
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
 
 PAGINA_HTML = """
 <!DOCTYPE html>
@@ -28,14 +39,6 @@ PAGINA_HTML = """
             justify-content: center;
             align-items: center;
             padding: 20px;
-            animation: gradientBG 15s ease infinite;
-            background-size: 400% 400%;
-        }
-
-        @keyframes gradientBG {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
         }
 
         .container {
@@ -45,13 +48,6 @@ PAGINA_HTML = """
             padding: 40px;
             max-width: 480px;
             width: 100%;
-            backdrop-filter: blur(10px);
-            transform: translateY(0);
-            transition: transform 0.3s ease;
-        }
-
-        .container:hover {
-            transform: translateY(-5px);
         }
 
         .logo {
@@ -68,7 +64,6 @@ PAGINA_HTML = """
             align-items: center;
             justify-content: center;
             margin-bottom: 15px;
-            box-shadow: 0 10px 20px rgba(255, 0, 0, 0.3);
         }
 
         .logo-icon::before {
@@ -91,7 +86,6 @@ PAGINA_HTML = """
             text-align: center;
             margin-bottom: 30px;
             font-size: 14px;
-            font-weight: 400;
         }
 
         .input-group {
@@ -99,23 +93,12 @@ PAGINA_HTML = """
             margin-bottom: 20px;
         }
 
-        .input-icon {
-            position: absolute;
-            left: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #999;
-            font-size: 20px;
-            transition: color 0.3s ease;
-        }
-
         input[type="text"] {
             width: 100%;
-            padding: 16px 16px 16px 48px;
+            padding: 16px;
             border: 2px solid #e0e0e0;
             border-radius: 12px;
             font-size: 15px;
-            transition: all 0.3s ease;
             background: #f8f9fa;
             color: #333;
             outline: none;
@@ -124,11 +107,6 @@ PAGINA_HTML = """
         input[type="text"]:focus {
             border-color: #667eea;
             background: white;
-            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-        }
-
-        input[type="text"]::placeholder {
-            color: #999;
         }
 
         button {
@@ -141,40 +119,49 @@ PAGINA_HTML = """
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            letter-spacing: 0.5px;
-        }
-
-        button::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s ease;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-        }
-
-        button:hover::before {
-            left: 100%;
-        }
-
-        button:active {
-            transform: translateY(0);
+            margin-bottom: 10px;
         }
 
         button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
-            transform: none;
+        }
+
+        .format-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .format-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .format-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .error-message {
+            display: none;
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .error-message.active {
+            display: block;
         }
 
         .loading {
@@ -202,152 +189,6 @@ PAGINA_HTML = """
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        .progress-bar {
-            display: none;
-            width: 100%;
-            height: 6px;
-            background: #e0e0e0;
-            border-radius: 3px;
-            margin-top: 15px;
-            overflow: hidden;
-        }
-
-        .progress-bar.active {
-            display: block;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            width: 0%;
-            border-radius: 3px;
-            animation: progress 2s ease-in-out infinite;
-        }
-
-        @keyframes progress {
-            0% { width: 0%; }
-            50% { width: 70%; }
-            100% { width: 100%; }
-        }
-
-        .quality-selector {
-            margin: 20px 0;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .quality-btn {
-            padding: 8px 16px;
-            border: 2px solid #667eea;
-            background: white;
-            color: #667eea;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 13px;
-            transition: all 0.3s ease;
-        }
-
-        .quality-btn.active {
-            background: #667eea;
-            color: white;
-        }
-
-        .format-selector {
-            margin: 20px 0;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-        }
-
-        .format-btn {
-            padding: 8px 16px;
-            border: 2px solid #667eea;
-            background: white;
-            color: #667eea;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .format-btn.active {
-            background: #667eea;
-            color: white;
-        }
-
-        .features {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e0e0e0;
-        }
-
-        .feature {
-            text-align: center;
-            color: #666;
-            font-size: 12px;
-            transition: transform 0.3s ease;
-        }
-
-        .feature:hover {
-            transform: translateY(-3px);
-        }
-
-        .feature-icon {
-            font-size: 24px;
-            margin-bottom: 5px;
-            display: block;
-        }
-
-        .version {
-            text-align: center;
-            color: #999;
-            font-size: 11px;
-            margin-top: 20px;
-        }
-
-        .error-message {
-            display: none;
-            background: #fee;
-            color: #c33;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 15px;
-            text-align: center;
-            font-size: 14px;
-        }
-
-        .error-message.active {
-            display: block;
-        }
-
-        @media (max-width: 480px) {
-            .container {
-                padding: 30px 20px;
-            }
-            
-            h1 {
-                font-size: 24px;
-            }
-            
-            .features {
-                flex-wrap: wrap;
-                gap: 15px;
-            }
-            
-            .quality-selector {
-                gap: 5px;
-            }
-            
-            .quality-btn {
-                padding: 6px 12px;
-                font-size: 12px;
-            }
-        }
     </style>
 </head>
 <body>
@@ -356,114 +197,39 @@ PAGINA_HTML = """
             <div class="logo-icon"></div>
         </div>
         <h1>YouTube Downloader</h1>
-        <p class="subtitle">Descarga tus videos favoritos al instante</p>
+        <p class="subtitle">Descarga videos de YouTube fácilmente</p>
         
         <form id="downloadForm" onsubmit="handleSubmit(event)">
-            <div class="input-group">
-                <span class="input-icon">🔗</span>
-                <input type="text" id="urlInput" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
-            </div>
+            <input type="text" id="urlInput" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
             
             <div class="format-selector">
                 <button type="button" class="format-btn active" onclick="selectFormat('video', this)">🎬 Video</button>
-                <button type="button" class="format-btn" onclick="selectFormat('audio', this)">🎵 Audio</button>
-            </div>
-            
-            <div class="quality-selector" id="qualitySelector">
-                <button type="button" class="quality-btn" onclick="selectQuality('best', this)">✨ Mejor</button>
-                <button type="button" class="quality-btn active" onclick="selectQuality('720p', this)">HD 720p</button>
-                <button type="button" class="quality-btn" onclick="selectQuality('480p', this)">SD 480p</button>
-                <button type="button" class="quality-btn" onclick="selectQuality('360p', this)">Baja 360p</button>
+                <button type="button" class="format-btn" onclick="selectFormat('audio', this)">🎵 Audio MP3</button>
             </div>
             
             <input type="hidden" id="formatInput" name="format" value="video">
-            <input type="hidden" id="qualityInput" name="quality" value="720p">
             
-            <button type="submit" id="downloadBtn">⬇️ Descargar Video</button>
+            <button type="submit" id="downloadBtn">⬇️ Descargar</button>
         </form>
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p id="loadingText">Preparando descarga...</p>
-            <p style="font-size: 12px; color: #999;">Buscando mejor calidad disponible...</p>
-        </div>
-        
-        <div class="progress-bar" id="progressBar">
-            <div class="progress-fill"></div>
+            <p>Descargando, por favor espera...</p>
         </div>
         
         <div class="error-message" id="errorMessage"></div>
-        
-        <div class="features">
-            <div class="feature">
-                <span class="feature-icon">📱</span>
-                Móvil
-            </div>
-            <div class="feature">
-                <span class="feature-icon">💻</span>
-                PC
-            </div>
-            <div class="feature">
-                <span class="feature-icon">📟</span>
-                Tablet
-            </div>
-            <div class="feature">
-                <span class="feature-icon">⚡</span>
-                Rápido
-            </div>
-        </div>
-        
-        <div class="version">v3.0 • YouTube Downloader</div>
     </div>
 
     <script>
         let selectedFormat = 'video';
-        let selectedQuality = '720p';
         
         function selectFormat(format, btn) {
             selectedFormat = format;
             document.getElementById('formatInput').value = format;
-            
-            // Actualizar botones de formato
             document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
-            // Mostrar/ocultar selector de calidad
-            const qualitySelector = document.getElementById('qualitySelector');
-            qualitySelector.style.display = format === 'video' ? 'flex' : 'none';
-            
-            // Actualizar texto del botón
-            updateDownloadButton();
-        }
-        
-        function selectQuality(quality, btn) {
-            selectedQuality = quality;
-            document.getElementById('qualityInput').value = quality;
-            
-            // Actualizar botones de calidad
-            document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            
-            updateDownloadButton();
-        }
-        
-        function updateDownloadButton() {
-            const downloadBtn = document.getElementById('downloadBtn');
-            const loadingText = document.getElementById('loadingText');
-            
-            if (selectedFormat === 'audio') {
-                downloadBtn.textContent = '🎵 Descargar Audio MP3';
-                loadingText.textContent = 'Descargando audio...';
-            } else {
-                const qualityLabels = {
-                    'best': 'Mejor calidad',
-                    '720p': 'HD 720p',
-                    '480p': 'SD 480p',
-                    '360p': 'Baja 360p'
-                };
-                downloadBtn.textContent = '⬇️ Descargar Video (' + qualityLabels[selectedQuality] + ')';
-                loadingText.textContent = 'Descargando video en ' + qualityLabels[selectedQuality] + '...';
-            }
+            document.getElementById('downloadBtn').textContent = 
+                format === 'audio' ? '🎵 Descargar Audio MP3' : '⬇️ Descargar Video';
         }
         
         function handleSubmit(event) {
@@ -472,10 +238,8 @@ PAGINA_HTML = """
             const urlInput = document.getElementById('urlInput');
             const downloadBtn = document.getElementById('downloadBtn');
             const loading = document.getElementById('loading');
-            const progressBar = document.getElementById('progressBar');
             const errorMessage = document.getElementById('errorMessage');
             
-            // Reset estados
             errorMessage.classList.remove('active');
             errorMessage.textContent = '';
             
@@ -491,86 +255,65 @@ PAGINA_HTML = """
                 return;
             }
             
-            // Mostrar loading
             downloadBtn.disabled = true;
-            downloadBtn.textContent = '⏳ Buscando video...';
+            downloadBtn.textContent = '⏳ Descargando...';
             loading.classList.add('active');
-            progressBar.classList.add('active');
             
-            // Construir URL
-            let downloadUrl = '/descargar?url=' + encodeURIComponent(url) + '&format=' + selectedFormat;
-            if (selectedFormat === 'video') {
-                downloadUrl += '&quality=' + selectedQuality;
-            }
+            window.location.href = '/descargar?url=' + encodeURIComponent(url) + '&format=' + selectedFormat;
             
-            // Iniciar descarga
-            window.location.href = downloadUrl;
-            
-            // Timeout para restaurar botón
             setTimeout(() => {
                 downloadBtn.disabled = false;
-                updateDownloadButton();
+                downloadBtn.textContent = selectedFormat === 'audio' ? '🎵 Descargar Audio MP3' : '⬇️ Descargar Video';
                 loading.classList.remove('active');
-                progressBar.classList.remove('active');
-            }, 15000);
+            }, 10000);
         }
         
         function showError(message) {
             const errorMessage = document.getElementById('errorMessage');
             errorMessage.textContent = message;
             errorMessage.classList.add('active');
-            setTimeout(() => {
-                errorMessage.classList.remove('active');
-            }, 5000);
+            setTimeout(() => errorMessage.classList.remove('active'), 5000);
         }
-        
-        // Inicializar texto del botón
-        updateDownloadButton();
     </script>
 </body>
 </html>
 """
 
 def cargar_cookies():
-    """Carga las cookies desde variable de entorno o archivo"""
-    cookies_env = os.environ.get('YOUTUBE_COOKIES')
-    if cookies_env:
-        try:
+    """Carga las cookies desde variable de entorno"""
+    try:
+        cookies_env = os.environ.get('YOUTUBE_COOKIES')
+        if cookies_env:
+            logger.info("Cargando cookies desde variable de entorno...")
             with open(COOKIES_PATH, 'w', encoding='utf-8') as f:
                 f.write(cookies_env)
+            logger.info(f"Cookies guardadas en {COOKIES_PATH}")
             return True
-        except Exception as e:
-            print(f"Error guardando cookies: {e}")
+        else:
+            logger.warning("No se encontró la variable YOUTUBE_COOKIES")
             return False
-    return False
+    except Exception as e:
+        logger.error(f"Error al cargar cookies: {str(e)}")
+        return False
 
-def configurar_opciones(formato='video', calidad='720p'):
-    """Configura las opciones de yt-dlp con formato flexible"""
+def configurar_opciones(formato='video'):
+    """Configura las opciones de yt-dlp"""
+    logger.info(f"Configurando opciones para formato: {formato}")
     
-    # Configuración base
     opciones = {
-        'quiet': True,
-        'no_warnings': True,
+        'quiet': False,  # Cambiado a False para ver logs
+        'no_warnings': False,
+        'verbose': True,  # Más detalles
         'outtmpl': '/tmp/%(id)s.%(ext)s',
         'socket_timeout': 30,
-        'retries': 5,
-        'extractor_retries': 3,
-        'fragment_retries': 5,
-        'retry_sleep_functions': {
-            'http': lambda n: 2,
-            'fragment': lambda n: 1,
-        },
+        'retries': 3,
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-            'Sec-Fetch-Mode': 'navigate',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
     }
     
-    # Configurar formato según selección
+    # Formato simple y compatible
     if formato == 'audio':
-        # Solo audio, el mejor disponible
         opciones['format'] = 'bestaudio/best'
         opciones['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
@@ -578,198 +321,153 @@ def configurar_opciones(formato='video', calidad='720p'):
             'preferredquality': '192',
         }]
     else:
-        # Video con calidad seleccionada, con fallback automático
-        formatos_por_calidad = {
-            'best': [
-                'bv*+ba/b',                    # Mejor video + mejor audio
-                'bv+ba/b',                     # Alternativa
-                'best',                        # Mejor formato único
-            ],
-            '720p': [
-                'bv*[height<=720]+ba/b',       # 720p combinado
-                'bv[height<=720]+ba/b',        # Alternativa 720p
-                'bv*[height<=720]',            # Solo video 720p
-                'best[height<=720]',           # Mejor hasta 720p
-                'worst[height>=720]',          # Peor que sea al menos 720p
-                'best',                        # Cualquier cosa
-            ],
-            '480p': [
-                'bv*[height<=480]+ba/b',
-                'bv[height<=480]+ba/b',
-                'best[height<=480]',
-                'worst[height>=480]',
-                'best',
-            ],
-            '360p': [
-                'bv*[height<=360]+ba/b',
-                'bv[height<=360]+ba/b',
-                'best[height<=360]',
-                'worst[height>=360]',
-                'best',
-            ],
-        }
-        
-        # Usar lista de formatos con fallback automático
-        formatos = formatos_por_calidad.get(calidad, formatos_por_calidad['720p'])
-        opciones['format'] = '/'.join(formatos)  # yt-dlp probará cada formato en orden
+        # Usar formatos simples y compatibles
+        opciones['format'] = 'best[height<=720]/best'
     
     # Añadir cookies si existen
     if os.path.exists(COOKIES_PATH):
         opciones['cookiefile'] = COOKIES_PATH
-        print("Usando archivo de cookies")
-    
-    # Intentar diferentes clientes si falla
-    opciones['extractor_args'] = {
-        'youtube': {
-            'player_client': ['android', 'web', 'mweb'],
-        }
-    }
+        logger.info("Usando archivo de cookies")
     
     return opciones
 
 @app.route('/')
 def inicio():
+    logger.info("Sirviendo página principal")
     return render_template_string(PAGINA_HTML)
 
 @app.route('/descargar', methods=['GET'])
 def descargar():
-    video_url = request.args.get('url')
-    formato = request.args.get('format', 'video')
-    calidad = request.args.get('quality', '720p')
-    
-    if not video_url:
-        return "Error: No se proporcionó una URL", 400
-
-    # Validar URL de YouTube
-    if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
-        return "Error: URL no válida. Debe ser un enlace de YouTube", 400
-
-    # Cargar cookies
-    cookies_cargadas = cargar_cookies()
-    
-    if not cookies_cargadas and not os.path.exists(COOKIES_PATH):
-        print("ADVERTENCIA: No se encontraron cookies. YouTube puede requerir autenticación.")
-
-    # Configurar opciones con el formato flexible
-    opciones = configurar_opciones(formato, calidad)
-
     try:
+        video_url = request.args.get('url')
+        formato = request.args.get('format', 'video')
+        
+        logger.info(f"Iniciando descarga - URL: {video_url}, Formato: {formato}")
+        
+        if not video_url:
+            logger.error("No se proporcionó URL")
+            return "Error: No se proporcionó una URL", 400
+
+        # Validar URL
+        if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
+            logger.error(f"URL no válida: {video_url}")
+            return "Error: URL no válida", 400
+
+        # Verificar que /tmp existe y es escribible
+        if not os.path.exists('/tmp'):
+            logger.error("Directorio /tmp no existe")
+            return "Error: Directorio temporal no disponible", 500
+        
+        # Cargar cookies
+        cargar_cookies()
+
+        # Configurar opciones
+        opciones = configurar_opciones(formato)
+        
+        logger.info("Opciones configuradas, iniciando descarga...")
+        
+        # Descargar video
         with yt_dlp.YoutubeDL(opciones) as ydl:
+            logger.info("Extrayendo información del video...")
             info = ydl.extract_info(video_url, download=True)
             video_id = info.get('id')
-            titulo = info.get('title', 'video').replace('/', '-').replace('\\', '-')
-            
+            titulo = info.get('title', 'video')
+            # Limpiar título
+            titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            logger.info(f"Video descargado: {titulo} (ID: {video_id})")
+
+        # Buscar archivo descargado
+        logger.info(f"Buscando archivos para ID: {video_id}")
+        archivos = glob.glob(f'/tmp/{video_id}.*')
+        logger.info(f"Archivos encontrados: {archivos}")
+        
+        if not archivos:
+            logger.error("No se encontró el archivo descargado")
+            return "Error: No se encontró el archivo descargado", 500
+
+        archivo = archivos[0]
+        ext = archivo.split('.')[-1]
+        tamaño = os.path.getsize(archivo)
+        logger.info(f"Archivo seleccionado: {archivo} ({tamaño} bytes)")
+
+        def generar():
+            try:
+                with open(archivo, 'rb') as f:
+                    while True:
+                        chunk = f.read(8192)  # Chunks más pequeños
+                        if not chunk:
+                            break
+                        yield chunk
+            except Exception as e:
+                logger.error(f"Error durante el streaming: {str(e)}")
+            finally:
+                try:
+                    if os.path.exists(archivo):
+                        os.remove(archivo)
+                        logger.info(f"Archivo temporal eliminado: {archivo}")
+                except Exception as e:
+                    logger.error(f"Error al eliminar archivo: {str(e)}")
+
+        logger.info("Iniciando streaming del archivo...")
+        return Response(
+            generar(),
+            mimetype='application/octet-stream',
+            headers={
+                'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
+                'Content-Length': str(tamaño),
+            }
+        )
+
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
+        logger.error(f"Error de yt-dlp: {error_msg}")
         
-        # Intentar con formato más básico si falla
-        if 'Requested format is not available' in error_msg:
-            try:
-                print("Formato solicitado no disponible, intentando con mejor calidad disponible...")
-                opciones['format'] = 'best'
-                with yt_dlp.YoutubeDL(opciones) as ydl:
-                    info = ydl.extract_info(video_url, download=True)
-                    video_id = info.get('id')
-                    titulo = info.get('title', 'video').replace('/', '-').replace('\\', '-')
-            except Exception as e2:
-                return f"Error: No se pudo descargar el video en ningún formato. Puede estar restringido.", 500
-        elif 'Sign in to confirm' in error_msg:
-            return "Error: YouTube requiere autenticación. El servidor necesita cookies válidas.", 500
+        if 'Sign in to confirm' in error_msg:
+            return "Error: YouTube requiere autenticación. Configura las cookies.", 500
         elif 'Video unavailable' in error_msg:
-            return "Error: Video no disponible. Puede ser privado o eliminado.", 500
+            return "Error: Video no disponible", 500
+        elif 'Requested format is not available' in error_msg:
+            return "Error: Formato no disponible para este video", 500
         else:
             return f"Error de descarga: {error_msg}", 500
+            
+    except Exception as e:
+        error_detallado = traceback.format_exc()
+        logger.error(f"Error inesperado: {error_detallado}")
+        return f"Error interno del servidor: {str(e)}", 500
+
+@app.route('/test')
+def test():
+    """Endpoint de prueba para verificar que el servidor funciona"""
+    try:
+        # Verificar componentes
+        checks = {
+            'python_version': sys.version,
+            'flask_working': True,
+            'tmp_exists': os.path.exists('/tmp'),
+            'tmp_writable': os.access('/tmp', os.W_OK),
+            'cookies_env': 'YOUTUBE_COOKIES' in os.environ,
+            'cookies_file': os.path.exists(COOKIES_PATH),
+            'yt_dlp_version': yt_dlp.version.__version__,
+        }
+        
+        # Verificar si hay cookies
+        if checks['cookies_env']:
+            cookies_len = len(os.environ.get('YOUTUBE_COOKIES', ''))
+            checks['cookies_length'] = cookies_len
+        
+        return checks
         
     except Exception as e:
-        return f"Error técnico: {str(e)}", 500
-
-    # Buscar el archivo descargado
-    patrones = [
-        f'/tmp/{video_id}.*',
-        f'/tmp/{video_id}.mp3',
-        f'/tmp/{video_id}.webm',
-        f'/tmp/{video_id}.mkv',
-    ]
-    
-    archivos = []
-    for patron in patrones:
-        archivos.extend(glob.glob(patron))
-    
-    if not archivos:
-        return "Error: No se encontró el archivo descargado", 500
-
-    # Elegir el mejor archivo (preferir mp4 para video, mp3 para audio)
-    if formato == 'audio':
-        archivos_audio = [f for f in archivos if f.endswith('.mp3')]
-        archivo = archivos_audio[0] if archivos_audio else archivos[0]
-    else:
-        archivos_video = [f for f in archivos if f.endswith('.mp4')]
-        archivo = archivos_video[0] if archivos_video else archivos[0]
-    
-    ext = archivo.split('.')[-1]
-    
-    # Mapear extensiones a tipos MIME
-    mime_types = {
-        'mp4': 'video/mp4',
-        'webm': 'video/webm',
-        'mkv': 'video/x-matroska',
-        'mp3': 'audio/mpeg',
-        'm4a': 'audio/mp4',
-        'opus': 'audio/opus',
-        'ogg': 'audio/ogg',
-    }
-    
-    mimetype = mime_types.get(ext, 'application/octet-stream')
-    
-    def generar():
-        try:
-            with open(archivo, 'rb') as f:
-                while True:
-                    chunk = f.read(1024 * 256)  # 256KB chunks
-                    if not chunk:
-                        break
-                    yield chunk
-        finally:
-            # Limpiar archivos temporales
-            try:
-                if os.path.exists(archivo):
-                    os.remove(archivo)
-                # Limpiar todos los archivos temporales del video
-                for f in glob.glob(f'/tmp/{video_id}.*'):
-                    if os.path.exists(f):
-                        os.remove(f)
-            except:
-                pass
-
-    # Crear respuesta con streaming
-    response = Response(
-        generar(),
-        mimetype=mimetype,
-        headers={
-            'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
-            'Content-Length': str(os.path.getsize(archivo)),
-            'X-Content-Type-Options': 'nosniff',
-        }
-    )
-    
-    return response
-
-@app.route('/health')
-def health():
-    """Endpoint para verificar que el servidor está funcionando"""
-    cookies_existen = os.path.exists(COOKIES_PATH)
-    return {
-        'status': 'ok',
-        'cookies': cookies_existen,
-        'version': '3.0'
-    }
+        return {'error': str(e), 'traceback': traceback.format_exc()}, 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
     
-    print(f"Iniciando servidor en puerto {port}")
-    print(f"Cookies configuradas: {'Sí' if os.environ.get('YOUTUBE_COOKIES') else 'No'}")
+    logger.info(f"Iniciando servidor en puerto {port}")
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"yt-dlp version: {yt_dlp.version.__version__}")
     
     app.run(
         host='0.0.0.0',
