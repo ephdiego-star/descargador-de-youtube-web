@@ -4,7 +4,7 @@ import yt_dlp
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
-COOKIES_PATH = 'cookies.txt'
+COOKIES_PATH = '/tmp/cookies.txt'  # Cambiado a /tmp para entornos cloud
 
 PAGINA_HTML = """
 <!DOCTYPE html>
@@ -282,6 +282,29 @@ PAGINA_HTML = """
             display: block;
         }
 
+        .format-selector {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .format-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .format-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
         @media (max-width: 480px) {
             .container {
                 padding: 30px 20px;
@@ -311,12 +334,20 @@ PAGINA_HTML = """
                 <span class="input-icon">🔗</span>
                 <input type="text" id="urlInput" name="url" placeholder="Pega el enlace de YouTube aquí..." required>
             </div>
-            <button type="submit" id="downloadBtn">⬇️ Descargar Video</button>
+            
+            <div class="format-selector">
+                <button type="button" class="format-btn active" onclick="selectFormat('video', this)">🎬 Video</button>
+                <button type="button" class="format-btn" onclick="selectFormat('audio', this)">🎵 Audio</button>
+            </div>
+            
+            <input type="hidden" id="formatInput" name="format" value="video">
+            
+            <button type="submit" id="downloadBtn">⬇️ Descargar</button>
         </form>
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Descargando video...</p>
+            <p id="loadingText">Descargando video...</p>
             <p style="font-size: 12px; color: #999;">Esto puede tardar unos momentos</p>
         </div>
         
@@ -345,10 +376,32 @@ PAGINA_HTML = """
             </div>
         </div>
         
-        <div class="version">v2.0 • YouTube Downloader</div>
+        <div class="version">v2.1 • YouTube Downloader</div>
     </div>
 
     <script>
+        let selectedFormat = 'video';
+        
+        function selectFormat(format, btn) {
+            selectedFormat = format;
+            document.getElementById('formatInput').value = format;
+            
+            // Actualizar botones
+            document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Actualizar texto del botón
+            const downloadBtn = document.getElementById('downloadBtn');
+            const loadingText = document.getElementById('loadingText');
+            if (format === 'audio') {
+                downloadBtn.textContent = '🎵 Descargar Audio';
+                loadingText.textContent = 'Descargando audio...';
+            } else {
+                downloadBtn.textContent = '⬇️ Descargar Video';
+                loadingText.textContent = 'Descargando video...';
+            }
+        }
+        
         function handleSubmit(event) {
             event.preventDefault();
             
@@ -376,20 +429,20 @@ PAGINA_HTML = """
             
             // Mostrar loading
             downloadBtn.disabled = true;
-            downloadBtn.textContent = '⏳ Descargando...';
+            downloadBtn.textContent = '⏳ Preparando descarga...';
             loading.classList.add('active');
             progressBar.classList.add('active');
             
             // Iniciar descarga
-            window.location.href = '/descargar?url=' + encodeURIComponent(url);
+            window.location.href = '/descargar?url=' + encodeURIComponent(url) + '&format=' + selectedFormat;
             
-            // Simular progreso (la descarga real redirige)
+            // Timeout para restaurar botón
             setTimeout(() => {
                 downloadBtn.disabled = false;
-                downloadBtn.textContent = '⬇️ Descargar Video';
+                downloadBtn.textContent = selectedFormat === 'audio' ? '🎵 Descargar Audio' : '⬇️ Descargar Video';
                 loading.classList.remove('active');
                 progressBar.classList.remove('active');
-            }, 10000);
+            }, 15000);
         }
         
         function showError(message) {
@@ -405,6 +458,69 @@ PAGINA_HTML = """
 </html>
 """
 
+def cargar_cookies():
+    """Carga las cookies desde variable de entorno o archivo"""
+    cookies_env = os.environ.get('YOUTUBE_COOKIES')
+    if cookies_env:
+        try:
+            # La variable de entorno debe contener el contenido completo del archivo de cookies
+            with open(COOKIES_PATH, 'w', encoding='utf-8') as f:
+                f.write(cookies_env)
+            return True
+        except Exception as e:
+            print(f"Error guardando cookies: {e}")
+            return False
+    return False
+
+def configurar_opciones(formato='video'):
+    """Configura las opciones de yt-dlp según el formato deseado"""
+    
+    # Configuración base
+    opciones = {
+        'quiet': True,
+        'no_warnings': True,
+        'outtmpl': '/tmp/%(id)s.%(ext)s',
+        'socket_timeout': 30,
+        'retries': 5,
+        'extractor_retries': 3,
+        'fragment_retries': 5,
+        'retry_sleep_functions': {
+            'http': lambda n: 2,
+            'fragment': lambda n: 1,
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        },
+    }
+    
+    # Configurar formato
+    if formato == 'audio':
+        opciones['format'] = 'bestaudio/best'
+        opciones['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
+    else:
+        opciones['format'] = 'bv*[height<=720]+ba/b'  # Video 720p máximo
+    
+    # Añadir cookies si existen
+    if os.path.exists(COOKIES_PATH):
+        opciones['cookiefile'] = COOKIES_PATH
+        print("Usando archivo de cookies")
+    
+    # Intentar diferentes clientes si falla
+    opciones['extractor_args'] = {
+        'youtube': {
+            'player_client': ['web', 'mweb', 'android'],
+        }
+    }
+    
+    return opciones
+
 @app.route('/')
 def inicio():
     return render_template_string(PAGINA_HTML)
@@ -412,6 +528,8 @@ def inicio():
 @app.route('/descargar', methods=['GET'])
 def descargar():
     video_url = request.args.get('url')
+    formato = request.args.get('format', 'video')
+    
     if not video_url:
         return "Error: No se proporcionó una URL", 400
 
@@ -419,41 +537,14 @@ def descargar():
     if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
         return "Error: URL no válida. Debe ser un enlace de YouTube", 400
 
-    # Cargar cookies desde variable de entorno
-    cookies_env = os.environ.get('YOUTUBE_COOKIES')
-    if cookies_env:
-        try:
-            with open(COOKIES_PATH, 'w') as f:
-                f.write(cookies_env)
-        except Exception as e:
-            return f"Error al guardar cookies: {str(e)}", 500
+    # Cargar cookies
+    cookies_cargadas = cargar_cookies()
+    
+    if not cookies_cargadas and not os.path.exists(COOKIES_PATH):
+        print("ADVERTENCIA: No se encontraron cookies. YouTube puede requerir autenticación.")
 
-    # Configuración mejorada con timeouts y reintentos
-    opciones = {
-        'quiet': True,
-        'no_warnings': True,
-        'format': 'bv*[height<=720]+ba/b',  # Máximo 720p para descarga más rápida
-        'outtmpl': '/tmp/%(id)s.%(ext)s',
-        'socket_timeout': 30,        # Timeout de conexión de red
-        'retries': 5,                # Reintentos automáticos
-        'extractor_retries': 3,      # Reintentos del extractor
-        'fragment_retries': 5,       # Reintentos de fragmentos DASH
-        'retry_sleep_functions': {
-            'http': lambda n: 2,     # Espera 2 segundos entre reintentos HTTP
-            'fragment': lambda n: 1, # Espera 1 segundo entre fragmentos
-        },
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['mweb', 'android'],
-            }
-        },
-    }
-
-    if os.path.exists(COOKIES_PATH):
-        opciones['cookiefile'] = COOKIES_PATH
+    # Configurar opciones
+    opciones = configurar_opciones(formato)
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
@@ -462,21 +553,30 @@ def descargar():
             titulo = info.get('title', 'video').replace('/', '-').replace('\\', '-')
             
     except yt_dlp.utils.DownloadError as e:
-        # Limpiar archivos temporales en caso de error
-        if os.path.exists(COOKIES_PATH):
-            os.remove(COOKIES_PATH)
-        return f"Error de descarga: {str(e)}", 500
+        error_msg = str(e)
+        
+        # Mensaje más amigable para errores comunes
+        if 'Sign in to confirm' in error_msg:
+            return "Error: YouTube requiere autenticación. El servidor necesita cookies válidas.", 500
+        elif 'Video unavailable' in error_msg:
+            return "Error: Video no disponible. Puede ser privado o eliminado.", 500
+        else:
+            return f"Error de descarga: {error_msg}", 500
         
     except Exception as e:
-        if os.path.exists(COOKIES_PATH):
-            os.remove(COOKIES_PATH)
         return f"Error técnico: {str(e)}", 500
 
     # Buscar el archivo descargado
-    archivos = glob.glob(f'/tmp/{video_id}.*')
+    patrones = [
+        f'/tmp/{video_id}.*',
+        f'/tmp/{video_id}.mp3',  # Para audio convertido
+    ]
+    
+    archivos = []
+    for patron in patrones:
+        archivos.extend(glob.glob(patron))
+    
     if not archivos:
-        if os.path.exists(COOKIES_PATH):
-            os.remove(COOKIES_PATH)
         return "Error: No se encontró el archivo descargado", 500
 
     archivo = archivos[0]
@@ -507,8 +607,10 @@ def descargar():
             try:
                 if os.path.exists(archivo):
                     os.remove(archivo)
-                if os.path.exists(COOKIES_PATH):
-                    os.remove(COOKIES_PATH)
+                # También limpiar posibles archivos de audio original
+                for f in glob.glob(f'/tmp/{video_id}.*'):
+                    if os.path.exists(f):
+                        os.remove(f)
             except:
                 pass  # Ignorar errores de limpieza
 
@@ -525,23 +627,26 @@ def descargar():
     
     return response
 
-# Manejo de errores personalizado
-@app.errorhandler(404)
-def not_found(e):
-    return "Página no encontrada", 404
-
-@app.errorhandler(500)
-def server_error(e):
-    return "Error interno del servidor", 500
+@app.route('/health')
+def health():
+    """Endpoint para verificar que el servidor está funcionando"""
+    cookies_existen = os.path.exists(COOKIES_PATH)
+    return {
+        'status': 'ok',
+        'cookies': cookies_existen,
+        'version': '2.1'
+    }
 
 if __name__ == '__main__':
-    # Configuración para desarrollo
     port = int(os.environ.get('PORT', 8080))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
+    
+    print(f"Iniciando servidor en puerto {port}")
+    print(f"Cookies configuradas: {'Sí' if os.environ.get('YOUTUBE_COOKIES') else 'No'}")
     
     app.run(
         host='0.0.0.0',
         port=port,
         debug=debug,
-        threaded=True  # Permite manejar múltiples solicitudes
+        threaded=True
     )
