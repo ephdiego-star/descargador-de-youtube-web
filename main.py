@@ -4,7 +4,6 @@ import yt_dlp
 import traceback
 import sys
 import logging
-import subprocess
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
@@ -205,12 +204,10 @@ PAGINA_HTML = """
             currentQuality = quality;
             document.getElementById('qualityInput').value = quality;
             
-            // Reset all quality buttons
             document.querySelectorAll('.quality-btn').forEach(function(btn) {
                 btn.classList.remove('active');
             });
             
-            // Activate selected
             var btnId = 'q' + quality.replace('p', '');
             if (quality === 'best') btnId = 'qbest';
             var activeBtn = document.getElementById(btnId);
@@ -276,34 +273,6 @@ def cargar_cookies():
         logger.error(f"Error cookies: {e}")
         return False
 
-def convertir_a_mp4(archivo_entrada):
-    """Convierte video a MP4 con H.264"""
-    archivo_salida = archivo_entrada.rsplit('.', 1)[0] + '.mp4'
-    
-    logger.info(f"Convirtiendo a MP4: {archivo_entrada}")
-    
-    comando = [
-        'ffmpeg', '-i', archivo_entrada,
-        '-c:v', 'libx264',
-        '-preset', 'fast',
-        '-crf', '23',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-movflags', '+faststart',
-        '-y',
-        archivo_salida
-    ]
-    
-    try:
-        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=300)
-        if resultado.returncode == 0:
-            os.remove(archivo_entrada)
-            return archivo_salida
-        return None
-    except Exception as e:
-        logger.error(f"Error conversión: {e}")
-        return None
-
 @app.route('/')
 def inicio():
     return render_template_string(PAGINA_HTML)
@@ -339,7 +308,7 @@ def descargar():
         }
 
         if formato == 'audio':
-            # Audio: ignora calidad
+            # Audio: formato simple que no requiere ffmpeg para combinar
             opciones['format'] = 'bestaudio/best'
             opciones['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
@@ -347,59 +316,52 @@ def descargar():
                 'preferredquality': '192',
             }]
         else:
-            # Video con calidad seleccionada
-            # Sistema de fallback automático
+            # VIDEO: Usar formatos que NO requieren combinar (ya incluyen audio)
             formatos_por_calidad = {
                 '1080p': [
-                    'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
-                    'bestvideo[height<=720]+bestaudio/best[height<=720]',
+                    'best[height<=1080]',     # Formato único con video+audio
+                    'best[height<=720]',
                     'best',
                 ],
                 '720p': [
-                    'bestvideo[height<=720]+bestaudio/best[height<=720]',
-                    'bestvideo[height<=480]+bestaudio/best[height<=480]',
+                    'best[height<=720]',
+                    'best[height<=480]',
                     'best',
                 ],
                 '480p': [
-                    'bestvideo[height<=480]+bestaudio/best[height<=480]',
-                    'bestvideo[height<=360]+bestaudio/best[height<=360]',
+                    'best[height<=480]',
+                    'best[height<=360]',
                     'best',
                 ],
                 '360p': [
-                    'bestvideo[height<=360]+bestaudio/best[height<=360]',
+                    'best[height<=360]',
                     'worst',
                 ],
                 'best': ['best'],
             }
             
             formatos = formatos_por_calidad.get(calidad, formatos_por_calidad['720p'])
-            opciones['format'] = '/'.join(formatos)  # yt-dlp probará cada uno en orden
+            opciones['format'] = '/'.join(formatos)
 
         if os.path.exists(COOKIES_PATH):
             opciones['cookiefile'] = COOKIES_PATH
 
-        # Descargar con múltiples intentos
-        logger.info(f"Intentando formatos: {opciones['format']}")
+        # Descargar
+        logger.info(f"Usando formato: {opciones['format']}")
         
         try:
             with yt_dlp.YoutubeDL(opciones) as ydl:
                 info = ydl.extract_info(video_url, download=True)
         except Exception as e:
             error_msg = str(e)
-            logger.warning(f"Falló con calidad {calidad}: {error_msg}")
+            logger.warning(f"Error: {error_msg}")
             
-            # Si falla, intentar con 'best'
+            # Si falla, intentar con el formato más simple
             if 'Requested format is not available' in error_msg:
-                logger.info("Intentando con mejor calidad disponible...")
+                logger.info("Intentando con formato más básico...")
                 opciones['format'] = 'best'
-                try:
-                    with yt_dlp.YoutubeDL(opciones) as ydl:
-                        info = ydl.extract_info(video_url, download=True)
-                except:
-                    # Último intento
-                    opciones['format'] = 'worst'
-                    with yt_dlp.YoutubeDL(opciones) as ydl:
-                        info = ydl.extract_info(video_url, download=True)
+                with yt_dlp.YoutubeDL(opciones) as ydl:
+                    info = ydl.extract_info(video_url, download=True)
             else:
                 raise e
 
@@ -407,34 +369,26 @@ def descargar():
         titulo = info.get('title', 'video')
         titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
         
-        # Obtener altura real del video descargado
-        altura_real = info.get('height', '?')
-        logger.info(f"Descargado: {titulo} - Altura real: {altura_real}p")
+        logger.info(f"Descargado: {titulo}")
 
-        # Buscar archivos
+        # Buscar archivo
         archivos = glob.glob(f'/tmp/{video_id}.*')
         
         if not archivos:
             return "Error: No se encontró el archivo", 500
 
-        # Para audio, buscar MP3
+        # Preferir MP4 para video, MP3 para audio
         if formato == 'audio':
-            archivos_mp3 = [f for f in archivos if f.endswith('.mp3')]
-            archivo = archivos_mp3[0] if archivos_mp3 else archivos[0]
+            archivos_filtrados = [f for f in archivos if f.endswith('.mp3')]
+            archivo = archivos_filtrados[0] if archivos_filtrados else archivos[0]
         else:
-            # Para video, preferir MP4
-            archivos_mp4 = [f for f in archivos if f.endswith('.mp4')]
-            if archivos_mp4:
-                archivo = archivos_mp4[0]
-            else:
-                archivo = archivos[0]
-                if not archivo.endswith('.mp4'):
-                    nuevo = convertir_a_mp4(archivo)
-                    if nuevo:
-                        archivo = nuevo
+            archivos_filtrados = [f for f in archivos if f.endswith('.mp4')]
+            archivo = archivos_filtrados[0] if archivos_filtrados else archivos[0]
 
         ext = archivo.split('.')[-1]
         tamaño = os.path.getsize(archivo)
+        
+        logger.info(f"Archivo: {archivo} ({tamaño} bytes)")
 
         def generar():
             try:
