@@ -6,7 +6,7 @@ import sys
 import logging
 from flask import Flask, render_template_string, request, Response
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 # Configurar logging
 logging.basicConfig(
@@ -14,7 +14,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     stream=sys.stdout
 )
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 COOKIES_PATH = '/tmp/cookies.txt'
 
@@ -436,6 +436,6 @@ def descargar():
 def health():
     return {'status': 'ok'}
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
