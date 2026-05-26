@@ -4,12 +4,11 @@ import yt_dlp
 import traceback
 import sys
 import logging
-import urllib.parse
 from flask import Flask, render_template_string, request, Response
 
 app = Flask(_name_)
 
-# Configuración de registro del sistema
+# Configurar logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -17,8 +16,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(_name_)
 
-# Rutas de entorno de ejecución
-COOKIES_PATH = './temp/cookies.txt'
+COOKIES_PATH = '/tmp/cookies.txt'
 
 PAGINA_HTML = """
 <!DOCTYPE html>
@@ -26,12 +24,12 @@ PAGINA_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Downloader</title>
+    <title>YouTube Downloader</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #2b2b2b 0%, #1a1a1a 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -41,7 +39,7 @@ PAGINA_HTML = """
         .container {
             background: rgba(255, 255, 255, 0.95);
             border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             padding: 30px;
             max-width: 500px;
             width: 100%;
@@ -53,7 +51,7 @@ PAGINA_HTML = """
             border-radius: 10px; font-size: 14px; margin-bottom: 12px;
             background: #f8f9fa; outline: none;
         }
-        input[type="text"]:focus { border-color: #d32f2f; background: white; }
+        input[type="text"]:focus { border-color: #667eea; background: white; }
         
         .section-title {
             font-size: 13px;
@@ -72,28 +70,26 @@ PAGINA_HTML = """
         }
         .format-btn, .quality-btn {
             padding: 10px 14px; 
-            border: 2px solid #333;
+            border: 2px solid #667eea;
             background: white; 
-            color: #333; 
+            color: #667eea; 
             border-radius: 8px;
             cursor: pointer; 
             font-size: 13px;
             transition: all 0.3s;
         }
         .format-btn.active, .quality-btn.active { 
-            background: #d32f2f; 
-            border-color: #d32f2f;
+            background: #667eea; 
             color: white; 
         }
         .format-btn:hover, .quality-btn:hover {
-            background: #d32f2f;
-            border-color: #d32f2f;
+            background: #667eea;
             color: white;
         }
         button[type="submit"] {
             width: 100%; 
             padding: 14px;
-            background: linear-gradient(135deg, #d32f2f 0%, #9a0007 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white; 
             border: none; 
             border-radius: 10px;
@@ -113,7 +109,6 @@ PAGINA_HTML = """
             margin-top: 12px;
             text-align: center; 
             font-size: 13px;
-            font-weight: bold;
         }
         .error-message.show { display: block; }
         .loading {
@@ -124,7 +119,7 @@ PAGINA_HTML = """
         .loading.show { display: block; }
         .spinner {
             border: 3px solid #e0e0e0; 
-            border-top: 3px solid #d32f2f;
+            border-top: 3px solid #667eea;
             border-radius: 50%; 
             width: 35px; 
             height: 35px;
@@ -136,18 +131,16 @@ PAGINA_HTML = """
             100% { transform: rotate(360deg); }
         }
         .quality-selector.hidden { display: none; }
-        .platform-icons { text-align: center; font-size: 20px; margin-bottom: 15px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>⚡ Universal Downloader</h1>
-        <div class="platform-icons">📱 🐦 📸 🎵 🎬</div>
-        <p class="subtitle">Descarga desde YouTube, X, Instagram, Facebook y TikTok</p>
+        <h1>🎬 YouTube Downloader</h1>
+        <p class="subtitle">Descarga videos en MP4 compatible</p>
         
         <form id="downloadForm" method="GET" action="/descargar">
             <input type="text" id="urlInput" name="url" 
-                   placeholder="Pega el enlace aquí..." required>
+                   placeholder="Pega el enlace de YouTube aquí..." required>
             
             <p class="section-title">📁 Formato:</p>
             <div class="format-selector">
@@ -155,11 +148,9 @@ PAGINA_HTML = """
                         onclick="selectFormat('video')">🎬 Video</button>
                 <button type="button" id="audioBtn" class="format-btn" 
                         onclick="selectFormat('audio')">🎵 Audio MP3</button>
-                <button type="button" id="imagenBtn" class="format-btn" 
-                        onclick="selectFormat('imagen')">📸 Imagen</button>
             </div>
             
-            <p class="section-title">📺 Calidad (Solo YouTube):</p>
+            <p class="section-title">📺 Calidad:</p>
             <div class="quality-selector" id="qualitySelector">
                 <button type="button" id="q1080" class="quality-btn" 
                         onclick="selectQuality('1080p')">1080p</button>
@@ -176,12 +167,12 @@ PAGINA_HTML = """
             <input type="hidden" id="formatInput" name="format" value="video">
             <input type="hidden" id="qualityInput" name="quality" value="720p">
             
-            <button type="submit" id="downloadBtn">⬇️ Descargar Archivo</button>
+            <button type="submit" id="downloadBtn">⬇️ Descargar Video 720p</button>
         </form>
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>⏳ Extrayendo datos, aguanta un momento...</p>
+            <p>⏳ Descargando, por favor espera...</p>
         </div>
         
         <div class="error-message" id="errorMessage"></div>
@@ -197,20 +188,15 @@ PAGINA_HTML = """
             
             document.getElementById('videoBtn').classList.remove('active');
             document.getElementById('audioBtn').classList.remove('active');
-            document.getElementById('imagenBtn').classList.remove('active');
             
             if (format === 'video') {
                 document.getElementById('videoBtn').classList.add('active');
                 document.getElementById('qualitySelector').classList.remove('hidden');
                 updateButtonText();
-            } else if (format === 'audio') {
+            } else {
                 document.getElementById('audioBtn').classList.add('active');
                 document.getElementById('qualitySelector').classList.add('hidden');
                 document.getElementById('downloadBtn').textContent = '🎵 Descargar Audio MP3';
-            } else {
-                document.getElementById('imagenBtn').classList.add('active');
-                document.getElementById('qualitySelector').classList.add('hidden');
-                document.getElementById('downloadBtn').textContent = '📸 Descargar Imagen';
             }
         }
         
@@ -250,26 +236,20 @@ PAGINA_HTML = """
             
             if (!url) {
                 e.preventDefault();
-                errorDiv.textContent = '❌ Ingresa un enlace válido';
+                errorDiv.textContent = '❌ Ingresa un enlace de YouTube';
                 errorDiv.classList.add('show');
                 return false;
             }
             
-            var urlLower = url.toLowerCase();
-            var dominiosValidos = ['youtube.com', 'youtu.be', 'twitter.com', 'x.com', 'instagram.com', 'facebook.com', 'tiktok.com', 'pinterest.com'];
-            var esValido = dominiosValidos.some(function(dominio) {
-                return urlLower.indexOf(dominio) !== -1;
-            });
-
-            if (!esValido) {
+            if (url.indexOf('youtube.com') === -1 && url.indexOf('youtu.be') === -1) {
                 e.preventDefault();
-                errorDiv.textContent = '❌ Plataforma no soportada.';
+                errorDiv.textContent = '❌ Enlace no válido';
                 errorDiv.classList.add('show');
                 return false;
             }
             
             document.getElementById('loading').classList.add('show');
-            document.getElementById('downloadBtn').textContent = '⏳ Procesando en el servidor...';
+            document.getElementById('downloadBtn').textContent = '⏳ Procesando...';
             document.getElementById('downloadBtn').style.opacity = '0.6';
             
             return true;
@@ -280,7 +260,7 @@ PAGINA_HTML = """
 """
 
 def cargar_cookies():
-    """Carga las variables de sesión para autenticación"""
+    """Carga las cookies desde variable de entorno"""
     try:
         cookies_env = os.environ.get('YOUTUBE_COOKIES')
         if cookies_env:
@@ -289,7 +269,7 @@ def cargar_cookies():
             return True
         return False
     except Exception as e:
-        logger.error(f"Error en el manejo de cookies: {e}")
+        logger.error(f"Error cookies: {e}")
         return False
 
 @app.route('/')
@@ -303,134 +283,127 @@ def descargar():
         formato = request.args.get('format', 'video')
         calidad = request.args.get('quality', '720p')
         
-        logger.info(f"Solicitud: {video_url} | Formato: {formato} | Calidad: {calidad}")
+        logger.info(f"Descargando: {video_url} - {formato} - {calidad}")
         
         if not video_url:
             return "Error: URL no proporcionada", 400
 
-        dominios_permitidos = ['youtube.com', 'youtu.be', 'twitter.com', 'x.com', 'instagram.com', 'facebook.com', 'tiktok.com', 'pinterest.com']
-        if not any(dominio in video_url.lower() for dominio in dominios_permitidos):
-            return "Error: La plataforma solicitada no es soportada por el servidor actual.", 400
+        if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
+            return "Error: URL no válida", 400
 
         cargar_cookies()
 
-        # Configuración principal
+        # Configuración ultra compatible
         opciones = {
             'quiet': True,
             'no_warnings': True,
-            'outtmpl': './temp/%(id)s.%(ext)s',
+            'outtmpl': '/tmp/%(id)s.%(ext)s',
             'socket_timeout': 30,
             'retries': 10,
             'fragment_retries': 10,
             'extractor_retries': 5,
-            'ignoreerrors': True,
+            'ignoreerrors': True,  # Ignorar errores de formato
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
         }
 
-        # Aplicación de rutas según la intención del formato
         if formato == 'audio':
             opciones['format'] = 'bestaudio/best'
-            opciones['ffmpeg_location'] = r'C:\ffmpeg\bin'
-            opciones['writethumbnail'] = True
-            opciones['postprocessors'] = [
-                {
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                },
-                {
-                    'key': 'FFmpegMetadata',
-                    'add_metadata': True,
-                },
-                {
-                    'key': 'EmbedThumbnail',
-                    'already_have_thumbnail': False,
-                }
-            ]
-            formatos_a_probar = ['bestaudio/best']
-
-        elif formato == 'imagen':
-            # Evita procesamientos de FFmpeg para forzar descarga estática
-            opciones['format'] = 'best'
-            formatos_a_probar = ['best']
-
+            opciones['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }]
         else:
-            opciones['merge_output_format'] = 'mp4'
-            opciones['ffmpeg_location'] = r'C:\ffmpeg\bin'
-            es_youtube = 'youtube.com' in video_url.lower() or 'youtu.be' in video_url.lower()
-            
-            if es_youtube:
-                if calidad == '1080p':
-                    formatos_a_probar = ['bestvideo[height<=1080]+bestaudio/best', 'best']
-                elif calidad == '720p':
-                    formatos_a_probar = ['bestvideo[height<=720]+bestaudio/best', 'best']
-                elif calidad == '480p':
-                    formatos_a_probar = ['bestvideo[height<=480]+bestaudio/best', 'best']
-                elif calidad == '360p':
-                    formatos_a_probar = ['bestvideo[height<=360]+bestaudio/best', 'best']
-                else:  
-                    formatos_a_probar = ['bestvideo+bestaudio/best', 'best']
-            else:
-                formatos_a_probar = ['bestvideo+bestaudio/best', 'best', 'worst']
+            # Lista de formatos a probar, del más específico al más genérico
+            if calidad == '1080p':
+                formatos_a_probar = [
+                    'best[height<=1080]',
+                    'best[height<=720]',
+                    'best[height<=480]',
+                    'best',
+                    'worst',
+                ]
+            elif calidad == '720p':
+                formatos_a_probar = [
+                    'best[height<=720]',
+                    'best[height<=480]',
+                    'best[height<=360]',
+                    'best',
+                    'worst',
+                ]
+            elif calidad == '480p':
+                formatos_a_probar = [
+                    'best[height<=480]',
+                    'best[height<=360]',
+                    'best',
+                    'worst',
+                ]
+            elif calidad == '360p':
+                formatos_a_probar = [
+                    'best[height<=360]',
+                    'best',
+                    'worst',
+                ]
+            else:  # 'best'
+                formatos_a_probar = [
+                    'best',
+                    'worst',
+                ]
             
             opciones['format'] = '/'.join(formatos_a_probar)
 
         if os.path.exists(COOKIES_PATH):
             opciones['cookiefile'] = COOKIES_PATH
 
-        # Extracción
+        # Intentar descargar con cada formato
         info = None
         ultimo_error = None
         
-        for intento, formato_str in enumerate(formatos_a_probar):
+        for intento, formato_str in enumerate(formatos_a_probar if formato == 'video' else ['bestaudio/best']):
             try:
                 opciones_intento = opciones.copy()
                 opciones_intento['format'] = formato_str
+                logger.info(f"Intento {intento + 1}: {formato_str}")
+                
                 with yt_dlp.YoutubeDL(opciones_intento) as ydl:
                     info = ydl.extract_info(video_url, download=True)
+                    logger.info(f"¡Éxito con formato: {formato_str}!")
                     break
+                    
             except Exception as e:
                 ultimo_error = str(e)
+                logger.warning(f"Falló formato {formato_str}: {ultimo_error}")
                 continue
         
         if not info:
-            return f"Error en el servidor: Detalle técnico: {ultimo_error}", 500
+            return f"Error: No se pudo descargar. Último error: {ultimo_error}", 500
 
-        video_id = info.get('id', 'archivo')
-        titulo = info.get('title', 'descarga')
+        video_id = info.get('id')
+        titulo = info.get('title', 'video')
         titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        
+        altura = info.get('height', '?')
+        logger.info(f"Descargado: {titulo} ({altura}p)")
 
-        archivos = glob.glob(f'./temp/{video_id}.*')
+        # Buscar archivo
+        archivos = glob.glob(f'/tmp/{video_id}.*')
         
         if not archivos:
-            return "Error de I/O: El archivo no se localizó en el directorio temporal.", 500
+            return "Error: No se encontró el archivo descargado", 500
 
-        # Selección estricta del contenedor basado en la extensión
+        # Elegir mejor archivo
         if formato == 'audio':
-            preferidos = [f for f in archivos if f.lower().endswith('.mp3')]
-        elif formato == 'imagen':
-            preferidos = [f for f in archivos if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+            preferidos = [f for f in archivos if f.endswith('.mp3')]
         else:
-            preferidos = [f for f in archivos if f.lower().endswith('.mp4')]
+            preferidos = [f for f in archivos if f.endswith('.mp4')]
         
         archivo = preferidos[0] if preferidos else archivos[0]
-        ext = archivo.split('.')[-1].lower()
+        ext = archivo.split('.')[-1]
+        tamaño = os.path.getsize(archivo)
 
-        # Enrutamiento de Mimetypes para evitar que las fotos se corrompan o no carguen
-        if ext in ['jpg', 'jpeg']:
-            mimetype_salida = 'image/jpeg'
-        elif ext == 'png':
-            mimetype_salida = 'image/png'
-        elif ext == 'webp':
-            mimetype_salida = 'image/webp'
-        elif ext == 'mp3':
-            mimetype_salida = 'audio/mpeg'
-        else:
-            mimetype_salida = 'video/mp4'
-
-        def generar_flujo_datos():
+        def generar():
             try:
                 with open(archivo, 'rb') as f:
                     while True:
@@ -441,29 +414,27 @@ def descargar():
             finally:
                 try:
                     os.remove(archivo)
-                    for f in glob.glob(f'./temp/{video_id}*'):
+                    for f in glob.glob(f'/tmp/{video_id}*'):
                         if os.path.exists(f):
                             os.remove(f)
-                except Exception as e:
-                    logger.warning(f"Error durante limpieza: {e}")
-
-        encoded_filename = urllib.parse.quote(f"{titulo}.{ext}")
+                except:
+                    pass
 
         return Response(
-            generar_flujo_datos(),
-            mimetype=mimetype_salida,
+            generar(),
+            mimetype='video/mp4' if ext == 'mp4' else 'audio/mpeg',
             headers={
-                'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}",
+                'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
             }
         )
 
     except Exception as e:
-        logger.error(f"Excepción crítica: {traceback.format_exc()}")
-        return f"Error interno del servidor: {str(e)}", 500
+        logger.error(f"Error final: {traceback.format_exc()}")
+        return f"Error: {str(e)}", 500
 
 @app.route('/health')
 def health():
-    return {'status': 'operativo'}
+    return {'status': 'ok'}
 
 if _name_ == '_main_':
     port = int(os.environ.get('PORT', 8080))
