@@ -8,7 +8,7 @@ from flask import Flask, render_template_string, request, Response
 
 app = Flask(__name__)
 
-# Configurar logging
+# Configurar logging para ver el estado en la consola de Railway
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -137,7 +137,7 @@ PAGINA_HTML = """
 <body>
     <div class="container">
         <h1>🎬 YouTube Downloader</h1>
-        <p class="subtitle">Descarga videos en MP4 compatible</p>
+        <p class="subtitle">Descarga videos y audios en alta calidad con FFmpeg</p>
         
         <form id="downloadForm" method="GET" action="/descargar">
             <input type="text" id="urlInput" name="url" 
@@ -146,34 +146,34 @@ PAGINA_HTML = """
             <p class="section-title">📁 Formato:</p>
             <div class="format-selector">
                 <button type="button" id="videoBtn" class="format-btn active" 
-                        onclick="selectFormat('video')">🎬 Video</button>
+                        onclick="selectFormat('video')">🎬 Video MP4</button>
                 <button type="button" id="audioBtn" class="format-btn" 
                         onclick="selectFormat('audio')">🎵 Audio MP3</button>
             </div>
             
-            <p class="section-title">📺 Calidad:</p>
+            <p class="section-title">📺 Calidad de Video:</p>
             <div class="quality-selector" id="qualitySelector">
                 <button type="button" id="q1080" class="quality-btn" 
-                        onclick="selectQuality('1080p')">1080p</button>
+                        onclick="selectQuality('1080p')">1080p Full HD</button>
                 <button type="button" id="q720" class="quality-btn active" 
-                        onclick="selectQuality('720p')">720p</button>
+                        onclick="selectQuality('720p')">720p HD</button>
                 <button type="button" id="q480" class="quality-btn" 
                         onclick="selectQuality('480p')">480p</button>
                 <button type="button" id="q360" class="quality-btn" 
                         onclick="selectQuality('360p')">360p</button>
                 <button type="button" id="qbest" class="quality-btn" 
-                        onclick="selectQuality('best')">✨ Mejor</button>
+                        onclick="selectQuality('best')">✨ Máxima</button>
             </div>
             
             <input type="hidden" id="formatInput" name="format" value="video">
             <input type="hidden" id="qualityInput" name="quality" value="720p">
             
-            <button type="submit" id="downloadBtn">⬇️ Descargar Video 720p</button>
+            <button type="submit" id="downloadBtn">⬇️ Descargar Video 720p HD</button>
         </form>
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>⏳ Descargando, por favor espera...</p>
+            <p>⏳ Procesando y uniendo flujos de descarga, por favor espera...</p>
         </div>
         
         <div class="error-message" id="errorMessage"></div>
@@ -245,7 +245,7 @@ PAGINA_HTML = """
                 '720p': '720p HD',
                 '480p': '480p SD',
                 '360p': '360p',
-                'best': 'Mejor Calidad'
+                'best': 'Máxima Calidad'
             };
             document.getElementById('downloadBtn').textContent = '⬇️ Descargar Video ' + qualityNames[currentQuality];
         }
@@ -255,7 +255,6 @@ PAGINA_HTML = """
 """
 
 def obtener_ruta_cookies():
-    """Retorna la ruta del archivo de cookies utilizable o None si no existe ninguno"""
     try:
         cookies_env = os.environ.get('YOUTUBE_COOKIES')
         if cookies_env:
@@ -291,7 +290,6 @@ def descargar():
         if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
             return "Error: URL no válida", 400
 
-        # Opciones base de rendimiento y estabilidad
         opciones = {
             'quiet': True,
             'no_warnings': True,
@@ -306,12 +304,11 @@ def descargar():
             },
         }
 
-        # Asignar archivo de cookies si está disponible
         ruta_cookies = obtener_ruta_cookies()
         if ruta_cookies:
             opciones['cookiefile'] = ruta_cookies
 
-        # Configuración de formatos adaptativa para resolver fallos de disponibilidad
+        # Configuración de formatos combinados que requieren la presencia de FFmpeg
         if formato == 'audio':
             formatos_a_probar = ['bestaudio/best']
             opciones['postprocessors'] = [{
@@ -353,7 +350,6 @@ def descargar():
         info = None
         ultimo_error = None
         
-        # Bucle de reintentos sobre la lista de formatos estructurados
         for intento, formato_str in enumerate(formatos_a_probar):
             try:
                 opciones_intento = opciones.copy()
@@ -377,12 +373,10 @@ def descargar():
         titulo = info.get('title', 'archivo_descargado')
         titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
         
-        # Buscar el archivo generado en el directorio temporal
         archivos = glob.glob(f'/tmp/{video_id}.*')
         if not archivos:
             return "Error: El archivo fue procesado pero no se localizó en el almacenamiento temporal del servidor", 500
 
-        # Filtrar extensiones esperadas según el formato solicitado o tomar el contenedor resultante
         if formato == 'audio':
             preferidos = [f for f in archivos if f.endswith('.mp3')]
         else:
@@ -391,7 +385,6 @@ def descargar():
         archivo_final = preferidos[0] if preferidos else archivos[0]
         ext_final = archivo_final.split('.')[-1].lower()
         
-        # Asignación dinámica del MimeType correcto según la extensión real
         if formato == 'audio':
             mimetype_final = 'audio/mpeg' if ext_final == 'mp3' else f'audio/{ext_final}'
         else:
@@ -406,7 +399,6 @@ def descargar():
                             break
                         yield chunk
             finally:
-                # Limpieza absoluta de archivos residuales en el contenedor
                 try:
                     for f_resubido in glob.glob(f'/tmp/{video_id}*'):
                         if os.path.exists(f_resubido):
