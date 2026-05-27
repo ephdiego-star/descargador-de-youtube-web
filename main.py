@@ -300,7 +300,7 @@ def descargar():
             'retries': 10,
             'fragment_retries': 10,
             'extractor_retries': 5,
-            'ignoreerrors': False,  # Desactivado para capturar y pintar el mensaje real del error
+            'ignoreerrors': False,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             },
@@ -311,7 +311,7 @@ def descargar():
         if ruta_cookies:
             opciones['cookiefile'] = ruta_cookies
 
-        # Configuración de formatos según la selección
+        # Configuración de formatos adaptativa para resolver fallos de disponibilidad
         if formato == 'audio':
             formatos_a_probar = ['bestaudio/best']
             opciones['postprocessors'] = [{
@@ -321,20 +321,39 @@ def descargar():
             }]
         else:
             if calidad == '1080p':
-                formatos_a_probar = ['best[height<=1080]', 'best[height<=720]', 'best']
+                formatos_a_probar = [
+                    'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]',
+                    'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+                    'bestvideo+bestaudio/best'
+                ]
             elif calidad == '720p':
-                formatos_a_probar = ['best[height<=720]', 'best[height<=480]', 'best']
+                formatos_a_probar = [
+                    'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]',
+                    'bestvideo[height<=720]+bestaudio/best[height<=720]',
+                    'bestvideo+bestaudio/best'
+                ]
             elif calidad == '480p':
-                formatos_a_probar = ['best[height<=480]', 'best[height<=360]', 'best']
+                formatos_a_probar = [
+                    'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]',
+                    'bestvideo[height<=480]+bestaudio/best[height<=480]',
+                    'bestvideo+bestaudio/best'
+                ]
             elif calidad == '360p':
-                formatos_a_probar = ['best[height<=360]', 'best']
+                formatos_a_probar = [
+                    'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]',
+                    'bestvideo[height<=360]+bestaudio/best[height<=360]',
+                    'bestvideo+bestaudio/best'
+                ]
             else:
-                formatos_a_probar = ['best']
+                formatos_a_probar = [
+                    'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+                    'bestvideo+bestaudio/best'
+                ]
 
         info = None
         ultimo_error = None
         
-        # Bucle de reintentos sobre la lista de formatos
+        # Bucle de reintentos sobre la lista de formatos estructurados
         for intento, formato_str in enumerate(formatos_a_probar):
             try:
                 opciones_intento = opciones.copy()
@@ -363,7 +382,7 @@ def descargar():
         if not archivos:
             return "Error: El archivo fue procesado pero no se localizó en el almacenamiento temporal del servidor", 500
 
-        # Filtrar extensiones esperadas según el formato solicitado
+        # Filtrar extensiones esperadas según el formato solicitado o tomar el contenedor resultante
         if formato == 'audio':
             preferidos = [f for f in archivos if f.endswith('.mp3')]
         else:
@@ -372,7 +391,7 @@ def descargar():
         archivo_final = preferidos[0] if preferidos else archivos[0]
         ext_final = archivo_final.split('.')[-1].lower()
         
-        # Asignación dinámica del MimeType correcto
+        # Asignación dinámica del MimeType correcto según la extensión real
         if formato == 'audio':
             mimetype_final = 'audio/mpeg' if ext_final == 'mp3' else f'audio/{ext_final}'
         else:
