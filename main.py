@@ -3,6 +3,7 @@ import glob
 import tempfile
 from flask import Flask, request, send_file, render_template_string
 import yt_dlp
+import imageio_ffmpeg
 
 app = Flask(__name__)
 
@@ -107,11 +108,11 @@ def index():
                 
                 <label>Tipo de formato</label>
                 <select name="formato" id="formato">
-                    <option value="video">Video (MP4 / Nativo)</option>
+                    <option value="video">Video (MP4 estándar)</option>
                     <option value="audio">Audio MP3 (Solo Música)</option>
                 </select>
                 
-                <label>Calidad preferida</label>
+                <label>Calidad preferida (Solo para Video)</label>
                 <select name="calidad" id="calidad">
                     <option value="1080p">1080p (Alta Definición)</option>
                     <option value="720p" selected>720p (Estándar HD)</option>
@@ -122,7 +123,7 @@ def index():
                 <button type="submit">Descargar ahora</button>
             </form>
             <div class="footer-text">
-                Modo portátil activado. El procesamiento se realiza de forma directa usando los flujos de distribución del servidor.
+                Modo portable universal activado. Los binarios de procesamiento se autogestionan a través del entorno virtual.
             </div>
         </div>
     </body>
@@ -140,6 +141,7 @@ def descargar():
         return "Error: No se especificó ninguna URL.", 400
 
     dir_temporal = tempfile.gettempdir()
+    ruta_ffmpeg_automatica = imageio_ffmpeg.get_ffmpeg_exe()
 
     opciones = {
         'quiet': True,
@@ -150,6 +152,7 @@ def descargar():
         'fragment_retries': 10,
         'extractor_retries': 5,
         'ignoreerrors': False,
+        'ffmpeg_location': ruta_ffmpeg_automatica,
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -160,20 +163,25 @@ def descargar():
     if ruta_cookies:
         opciones['cookiefile'] = ruta_cookies
 
-    # Configuración de formatos en base a la calidad y tipo elegido
     if formato == 'audio':
         formatos_a_probar = ['bestaudio/best']
+        opciones['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
     else:
+        opciones['merge_output_format'] = 'mp4'
         if calidad == '1080p':
-            formatos_a_probar = ['best[height<=1080][ext=mp4]/best[height<=1080]/best']
+            formatos_a_probar = ['bestvideo[height<=1080]+bestaudio/best']
         elif calidad == '720p':
-            formatos_a_probar = ['best[height<=720][ext=mp4]/best[height<=720]/best']
+            formatos_a_probar = ['bestvideo[height<=720]+bestaudio/best']
         elif calidad == '480p':
-            formatos_a_probar = ['best[height<=480][ext=mp4]/best[height<=480]/best']
+            formatos_a_probar = ['bestvideo[height<=480]+bestaudio/best']
         elif calidad == '360p':
-            formatos_a_probar = ['best[height<=360][ext=mp4]/best[height<=360]/best']
+            formatos_a_probar = ['bestvideo[height<=360]+bestaudio/best']
         else:
-            formatos_a_probar = ['best[ext=mp4]/best']
+            formatos_a_probar = ['bestvideo+bestaudio/best']
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
@@ -188,21 +196,17 @@ def descargar():
         archivos_encontrados = glob.glob(patron_busqueda)
         
         if not archivos_encontrados:
-            return "Error: El archivo descargado no se localizó en la ruta temporal.", 500
+            return "Error: El archivo procesado no se localizó en la ruta temporal.", 500
             
         ruta_archivo_real = archivos_encontrados[0]
         _, extension_real = os.path.splitext(ruta_archivo_real)
 
-        # Ajuste de las respuestas de descarga según la selección del usuario
         if formato == 'audio':
             mimetype_final = 'audio/mpeg'
             extension_final = '.mp3'
         else:
-            extension_final = extension_real
-            if extension_real == '.webm':
-                mimetype_final = 'video/webm'
-            else:
-                mimetype_final = 'video/mp4'
+            mimetype_final = 'video/mp4'
+            extension_final = '.mp4'
 
         caracteres_limpios = "".join([c for c in titulo_video if c.isalpha() or c.isdigit() or c in ' -_']).strip()
         nombre_descarga = f"{caracteres_limpios}{extension_final}"
