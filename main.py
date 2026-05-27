@@ -16,7 +16,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-COOKIES_PATH = '/tmp/cookies.txt'
+COOKIES_TEMPORALES = '/tmp/cookies.txt'
+COOKIES_LOCALES = 'cookies.txt'
 
 PAGINA_HTML = """
 <!DOCTYPE html>
@@ -182,56 +183,9 @@ PAGINA_HTML = """
         var currentFormat = 'video';
         var currentQuality = '720p';
         
-        function selectFormat(format) {
-            currentFormat = format;
-            document.getElementById('formatInput').value = format;
-            
-            document.getElementById('videoBtn').classList.remove('active');
-            document.getElementById('audioBtn').classList.remove('active');
-            
-            if (format === 'video') {
-                document.getElementById('videoBtn').classList.add('active');
-                document.getElementById('qualitySelector').classList.remove('hidden');
-                updateButtonText();
-            } else {
-                document.getElementById('audioBtn').classList.add('active');
-                document.getElementById('qualitySelector').classList.add('hidden');
-                document.getElementById('downloadBtn').textContent = '🎵 Descargar Audio MP3';
-            }
-        }
-        
-        function selectQuality(quality) {
-            currentQuality = quality;
-            document.getElementById('qualityInput').value = quality;
-            
-            document.querySelectorAll('.quality-btn').forEach(function(btn) {
-                btn.classList.remove('active');
-            });
-            
-            var btnId = 'q' + quality.replace('p', '');
-            if (quality === 'best') btnId = 'qbest';
-            var activeBtn = document.getElementById(btnId);
-            if (activeBtn) activeBtn.classList.add('active');
-            
-            updateButtonText();
-        }
-        
-        function updateButtonText() {
-            var qualityNames = {
-                '1080p': '1080p Full HD',
-                '720p': '720p HD',
-                '480p': '480p SD',
-                '360p': '360p',
-                'best': 'Mejor Calidad'
-            };
-            document.getElementById('downloadBtn').textContent = 
-                '⬇️ Descargar Video ' + qualityNames[currentQuality];
-        }
-        
         document.getElementById('downloadForm').addEventListener('submit', function(e) {
             var url = document.getElementById('urlInput').value.trim();
             var errorDiv = document.getElementById('errorMessage');
-            
             errorDiv.classList.remove('show');
             
             if (!url) {
@@ -251,26 +205,72 @@ PAGINA_HTML = """
             document.getElementById('loading').classList.add('show');
             document.getElementById('downloadBtn').textContent = '⏳ Procesando...';
             document.getElementById('downloadBtn').style.opacity = '0.6';
-            
             return true;
         });
+
+        function selectFormat(format) {
+            currentFormat = format;
+            document.getElementById('formatInput').value = format;
+            document.getElementById('videoBtn').classList.remove('active');
+            document.getElementById('audioBtn').classList.remove('active');
+            
+            if (format === 'video') {
+                document.getElementById('videoBtn').classList.add('active');
+                document.getElementById('qualitySelector').classList.remove('hidden');
+                updateButtonText();
+            } else {
+                document.getElementById('audioBtn').classList.add('active');
+                document.getElementById('qualitySelector').classList.add('hidden');
+                document.getElementById('downloadBtn').textContent = '🎵 Descargar Audio MP3';
+            }
+        }
+        
+        function selectQuality(quality) {
+            currentQuality = quality;
+            document.getElementById('qualityInput').value = quality;
+            document.querySelectorAll('.quality-btn').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
+            
+            var btnId = 'q' + quality.replace('p', '');
+            if (quality === 'best') btnId = 'qbest';
+            var activeBtn = document.getElementById(btnId);
+            if (activeBtn) activeBtn.classList.add('active');
+            updateButtonText();
+        }
+        
+        function updateButtonText() {
+            var qualityNames = {
+                '1080p': '1080p Full HD',
+                '720p': '720p HD',
+                '480p': '480p SD',
+                '360p': '360p',
+                'best': 'Mejor Calidad'
+            };
+            document.getElementById('downloadBtn').textContent = '⬇️ Descargar Video ' + qualityNames[currentQuality];
+        }
     </script>
 </body>
 </html>
 """
 
-def cargar_cookies():
-    """Carga las cookies desde variable de entorno"""
+def obtener_ruta_cookies():
+    """Retorna la ruta del archivo de cookies utilizable o None si no existe ninguno"""
     try:
         cookies_env = os.environ.get('YOUTUBE_COOKIES')
         if cookies_env:
-            with open(COOKIES_PATH, 'w', encoding='utf-8') as f:
+            with open(COOKIES_TEMPORALES, 'w', encoding='utf-8') as f:
                 f.write(cookies_env)
-            return True
-        return False
+            logger.info("Cookies cargadas desde la variable de entorno.")
+            return COOKIES_TEMPORALES
+        elif os.path.exists(COOKIES_LOCALES):
+            logger.info("Cookies detectadas desde el archivo local cookies.txt.")
+            return COOKIES_LOCALES
+        logger.warning("No se detectó ningún origen de cookies.")
+        return None
     except Exception as e:
-        logger.error(f"Error cookies: {e}")
-        return False
+        logger.error(f"Error al procesar las cookies: {e}")
+        return None
 
 @app.route('/')
 def inicio():
@@ -283,7 +283,7 @@ def descargar():
         formato = request.args.get('format', 'video')
         calidad = request.args.get('quality', '720p')
         
-        logger.info(f"Descargando: {video_url} - {formato} - {calidad}")
+        logger.info(f"Petición recibida: {video_url} - {formato} - {calidad}")
         
         if not video_url:
             return "Error: URL no proporcionada", 400
@@ -291,9 +291,7 @@ def descargar():
         if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
             return "Error: URL no válida", 400
 
-        cargar_cookies()
-
-        # Configuración ultra compatible
+        # Opciones base de rendimiento y estabilidad
         opciones = {
             'quiet': True,
             'no_warnings': True,
@@ -302,135 +300,115 @@ def descargar():
             'retries': 10,
             'fragment_retries': 10,
             'extractor_retries': 5,
-            'ignoreerrors': True,  # Ignorar errores de formato
+            'ignoreerrors': True,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             },
         }
 
+        # Asignar archivo de cookies si está disponible
+        ruta_cookies = obtener_ruta_cookies()
+        if ruta_cookies:
+            opciones['cookiefile'] = ruta_cookies
+
+        # Configuración de formatos según la selección
         if formato == 'audio':
-            opciones['format'] = 'bestaudio/best'
+            formatos_a_probar = ['bestaudio/best']
             opciones['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }]
         else:
-            # Lista de formatos a probar, del más específico al más genérico
             if calidad == '1080p':
-                formatos_a_probar = [
-                    'best[height<=1080]',
-                    'best[height<=720]',
-                    'best[height<=480]',
-                    'best',
-                    'worst',
-                ]
+                formatos_a_probar = ['best[height<=1080]', 'best[height<=720]', 'best']
             elif calidad == '720p':
-                formatos_a_probar = [
-                    'best[height<=720]',
-                    'best[height<=480]',
-                    'best[height<=360]',
-                    'best',
-                    'worst',
-                ]
+                formatos_a_probar = ['best[height<=720]', 'best[height<=480]', 'best']
             elif calidad == '480p':
-                formatos_a_probar = [
-                    'best[height<=480]',
-                    'best[height<=360]',
-                    'best',
-                    'worst',
-                ]
+                formatos_a_probar = ['best[height<=480]', 'best[height<=360]', 'best']
             elif calidad == '360p':
-                formatos_a_probar = [
-                    'best[height<=360]',
-                    'best',
-                    'worst',
-                ]
-            else:  # 'best'
-                formatos_a_probar = [
-                    'best',
-                    'worst',
-                ]
-            
-            opciones['format'] = '/'.join(formatos_a_probar)
+                formatos_a_probar = ['best[height<=360]', 'best']
+            else:
+                formatos_a_probar = ['best']
 
-        if os.path.exists(COOKIES_PATH):
-            opciones['cookiefile'] = COOKIES_PATH
-
-        # Intentar descargar con cada formato
         info = None
         ultimo_error = None
         
-        for intento, formato_str in enumerate(formatos_a_probar if formato == 'video' else ['bestaudio/best']):
+        # Bucle de reintentos sobre la lista de formatos
+        for intento, formato_str in enumerate(formatos_a_probar):
             try:
                 opciones_intento = opciones.copy()
                 opciones_intento['format'] = formato_str
-                logger.info(f"Intento {intento + 1}: {formato_str}")
+                logger.info(f"Intentando descargar formato: {formato_str}")
                 
                 with yt_dlp.YoutubeDL(opciones_intento) as ydl:
                     info = ydl.extract_info(video_url, download=True)
-                    logger.info(f"¡Éxito con formato: {formato_str}!")
-                    break
-                    
+                    if info:
+                        logger.info(f"Descarga completada con éxito usando: {formato_str}")
+                        break
             except Exception as e:
                 ultimo_error = str(e)
-                logger.warning(f"Falló formato {formato_str}: {ultimo_error}")
+                logger.warning(f"El formato {formato_str} falló: {ultimo_error}")
                 continue
         
         if not info:
-            return f"Error: No se pudo descargar. Último error: {ultimo_error}", 500
+            return f"Error: No se pudo procesar la descarga de YouTube. Detalle: {ultimo_error}", 500
 
         video_id = info.get('id')
-        titulo = info.get('title', 'video')
+        titulo = info.get('title', 'archivo_descargado')
+        # Limpieza básica del nombre del archivo
         titulo = "".join(c for c in titulo if c.isalnum() or c in (' ', '-', '_')).rstrip()
         
-        altura = info.get('height', '?')
-        logger.info(f"Descargado: {titulo} ({altura}p)")
-
-        # Buscar archivo
+        # Buscar el archivo generado en el directorio temporal
         archivos = glob.glob(f'/tmp/{video_id}.*')
-        
         if not archivos:
-            return "Error: No se encontró el archivo descargado", 500
+            return "Error: El archivo fue procesado pero no se localizó en el almacenamiento temporal del servidor", 500
 
-        # Elegir mejor archivo
+        # Filtrar extensiones esperadas según el formato solicitado
         if formato == 'audio':
             preferidos = [f for f in archivos if f.endswith('.mp3')]
         else:
             preferidos = [f for f in archivos if f.endswith('.mp4')]
         
-        archivo = preferidos[0] if preferidos else archivos[0]
-        ext = archivo.split('.')[-1]
-        tamaño = os.path.getsize(archivo)
+        archivo_final = preferidos[0] if preferidos else archivos[0]
+        ext_final = archivo_final.split('.')[-1].lower()
+        
+        # Asignación dinámica del MimeType correcto
+        if formato == 'audio':
+            mimetype_final = 'audio/mpeg' if ext_final == 'mp3' else f'audio/{ext_final}'
+        else:
+            mimetype_final = 'video/mp4' if ext_final == 'mp4' else f'video/{ext_final}'
 
-        def generar():
+        def generar_streaming():
             try:
-                with open(archivo, 'rb') as f:
+                with open(archivo_final, 'rb') as f:
                     while True:
                         chunk = f.read(8192)
                         if not chunk:
                             break
                         yield chunk
             finally:
+                # Limpieza absoluta de archivos residuales en el contenedor
                 try:
-                    os.remove(archivo)
-                    for f in glob.glob(f'/tmp/{video_id}*'):
-                        if os.path.exists(f):
-                            os.remove(f)
-                except:
-                    pass
+                    for f_resubido in glob.glob(f'/tmp/{video_id}*'):
+                        if os.path.exists(f_resubido):
+                            os.remove(f_resubido)
+                    if os.path.exists(COOKIES_TEMPORALES):
+                        os.remove(COOKIES_TEMPORALES)
+                except Exception as e:
+                    logger.error(f"Error al limpiar residuos: {e}")
 
         return Response(
-            generar(),
-            mimetype='video/mp4' if ext == 'mp4' else 'audio/mpeg',
+            generar_streaming(),
+            mimetype=mimetype_final,
             headers={
-                'Content-Disposition': f'attachment; filename="{titulo}.{ext}"',
+                'Content-Disposition': f'attachment; filename="{titulo}.{ext_final}"',
             }
         )
 
     except Exception as e:
-        logger.error(f"Error final: {traceback.format_exc()}")
-        return f"Error: {str(e)}", 500
+        logger.error(f"Error crítico en la ejecución: {traceback.format_exc()}")
+        return f"Error interno del servidor: {str(e)}", 500
 
 @app.route('/health')
 def health():
